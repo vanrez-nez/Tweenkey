@@ -14,82 +14,84 @@ var Tweenkey = Tweenkey || (function() {
 		return c * t / d + b;
 	}
 
-	function Tween() {
+	function Tween( isTweenFrom ) {
 		var self = this;
-		//self.target;
 		self.running = false;
-		self.started = false;
-		self.completed = false;
+		self.isTweenFrom = isTweenFrom;
 		self.duration = 0;
 		self.elapsedTime = 0;
 		self.props = [];
-		//self.ease = lerp;
-		tweens.push(self);
 		return self;
 	}
 
-
 	function updateTween(tween, dt) {
+		if ( ! tween.running ) return true;
 
-		if ( ! tween.started && this.running ) {
-			tween.started = true;
-			isFunction( tween.onStart ) && tween.onStart( tween );
+		// fire onStart notification
+		tween.elapsedTime === 0 && isFunction( tween.onStart ) && tween.onStart( tween );
+		
+		// update tween
+		tween.elapsedTime += dt / 1000;
+		var idx = tween.props.length;
+		while ( idx-- ) {
+			var prop = tween.props[ idx ];
+			console.log(prop);
+			//target[ prop.name ] = tween.ease(tween.duration, )
 		}
 
-		if ( tween.target ) {
-			tween.elapsedTime += dt;
-			var idx = tween.props.length;
-			while ( idx ) {
-				target[ tween.props[ idx ] ] = tween.ease()
-			}
-			//lerp()
-			isFunction( tween.onUpdate ) && tween.onUpdate( tween )
-		} else {
-			console.warn( 'Invalid target:', tween.target );
-			this.completed = true;
-		}
+		// fire onUpdate notification
+		isFunction( tween.onUpdate ) && tween.onUpdate( tween )		
+	
 
-		if ( tween.elapsedTime >= duration ) {
+		if ( tween.elapsedTime >= tween.duration ) {
 			tween.running = false;
-			this.completed = true;
 			isFunction( tween.onComplete ) && tween.onComplete( tween );
+			return false;
+		}
+
+		return true;
+	}
+
+	function addProps(tween, params, reverse) {
+		// extract remaining properties as values for tweening
+		for ( var p in params ) {
+			!tween[ p ] && tween.target[ p ] !== undefined && tween.props.push( {
+				name: p,
+				[ reverse ? 'to' : 'from' ]: tween.target[ p ],
+				[ reverse ? 'from' : 'to' ]: params[ p ]
+			} );
 		}
 	}
 
 	function initTween(tween, target, duration, params) {
 		params =  params || {};
-		tween.autoStart = !!params.autoStart || true;
+		tween.target = target;
+		tween.running = params.autoStart ? !!params.autoStart : true;
 		tween.ease = isFunction( params.ease ) ? params.ease : lerp;
-		tween.duration = m.max( 0, Number(duration) || 0 );
-		
-		// extract remaining properties as values for tweening
-		for ( p in params ) {
-			!tween[ p ] && tween.props.push( {
-				p : params[ p ]
-			} );
-		}
+		tween.duration = m.max( 0, Number( duration ) || 0 );
 	}
 
 	Tween.prototype = {
-		to: function( target, duration, params ) {
-			initTween( this, target, duration, params );
-			console.log( tweens );
-		},
-		from: function( target, duration, params ) {
-
+		set: function( target, duration, params ) {
+			if ( target ) {
+				initTween( this, target, duration, params );
+				addProps( this, params, this.isTweenFrom );
+				tweens.push( this );
+			} else {
+				console.warn( 'Invalid target:', target );
+			}
 		}
 	};
 
 	function enterFrame( dt ) {
-		console.log('hua!', dt);
-		for ( var i = tweens.length - 1; i > 0; i-- ) {
-			var tween = tweens[ i ];
-			updateTween( tween, dt );
-			if ( tween.completed ) {
-				tweens.splice(i, 1);
+		var idx = tweens.length;
+		while( idx-- ) {
+			var tween = tweens[ idx ];
+			if ( ! updateTween( tween, dt ) ) {
+				tweens.splice(idx, 1);
 			}
 		}
-		//wnd.requestAnimationFrame( enterFrame );
+		wnd.requestAnimationFrame( enterFrame );
 	}
 
 	// taken from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
@@ -127,11 +129,13 @@ var Tweenkey = Tweenkey || (function() {
 	wnd.requestAnimationFrame( enterFrame );
 
     return {
-    	to: function() { 
-    		return new Tween().to( arguments );
+    	to: function() {
+    		var tween = new Tween( false );
+    		return tween.set.apply( tween, arguments );
     	},
     	from: function() {
-    		return new Tween().from( arguments );
+    		var tween = new Tween( true );
+    		return tween.set.apply( tween, arguments );
     	}
     };
 })();
