@@ -10,8 +10,8 @@ var Tweenkey = Tweenkey || (function() {
 		return Object.prototype.toString.call( object ) == '[object Array]';
 	}
 
-	function lerp( a, b, w ) {
-		return (1 - w) * a + w * b;
+	function lerp( t, b, c, d ) {
+		return c * t / d + b;
 	}
 
 	function Tween() {
@@ -22,6 +22,7 @@ var Tweenkey = Tweenkey || (function() {
 		self.completed = false;
 		self.duration = 0;
 		self.elapsedTime = 0;
+		self.props = [];
 		//self.ease = lerp;
 		tweens.push(self);
 		return self;
@@ -32,35 +33,46 @@ var Tweenkey = Tweenkey || (function() {
 
 		if ( ! tween.started && this.running ) {
 			tween.started = true;
-			isFunction(tween.onStart) && tween.onStart( tween );
+			isFunction( tween.onStart ) && tween.onStart( tween );
 		}
 
 		if ( tween.target ) {
 			tween.elapsedTime += dt;
-			lerp()
-			isFunction(tween.onUpdate) && tween.onUpdate( tween )
+			var idx = tween.props.length;
+			while ( idx ) {
+				target[ tween.props[ idx ] ] = tween.ease()
+			}
+			//lerp()
+			isFunction( tween.onUpdate ) && tween.onUpdate( tween )
 		} else {
-			console.warn( 'Cannot tween on given target:', tween.target );
+			console.warn( 'Invalid target:', tween.target );
 			this.completed = true;
 		}
 
-		if ( tween.elapsedTime => duration ) {
+		if ( tween.elapsedTime >= duration ) {
 			tween.running = false;
 			this.completed = true;
-			isFunction(tween.onComplete) && tween.onComplete( tween );
+			isFunction( tween.onComplete ) && tween.onComplete( tween );
 		}
 	}
 
 	function initTween(tween, target, duration, params) {
 		params =  params || {};
 		tween.autoStart = !!params.autoStart || true;
-		tween.ease = isFunction( params.ease ) ? params.ease || lerp;
-		tween.duration = M.max( 0, Number(duration) || 0 );
+		tween.ease = isFunction( params.ease ) ? params.ease : lerp;
+		tween.duration = m.max( 0, Number(duration) || 0 );
+		
+		// extract remaining properties as values for tweening
+		for ( p in params ) {
+			!tween[ p ] && tween.props.push( {
+				p : params[ p ]
+			} );
+		}
 	}
 
 	Tween.prototype = {
 		to: function( target, duration, params ) {
-			setTweenParams( this, target, duration, params );
+			initTween( this, target, duration, params );
 			console.log( tweens );
 		},
 		from: function( target, duration, params ) {
@@ -68,31 +80,10 @@ var Tweenkey = Tweenkey || (function() {
 		}
 	};
 
-	function Sequence() {
-
-	}
-
-	Sequence.prototype = {
-		to: function() {
-			this.add( ( new Tween() ).to( arguments ) );
-			return this;
-		},
-		from: function() {
-			this.add( ( new Tween() ).from( arguments ) );
-			return this;
-		},
-		add: function( tween ) {
-
-		},
-		start: function() {
-
-		}
-	};
-
 	function enterFrame( dt ) {
 		console.log('hua!', dt);
 		for ( var i = tweens.length - 1; i > 0; i-- ) {
-			var tween = tweens[i];
+			var tween = tweens[ i ];
 			updateTween( tween, dt );
 			if ( tween.completed ) {
 				tweens.splice(i, 1);
@@ -133,15 +124,14 @@ var Tweenkey = Tweenkey || (function() {
 		};
 	})();
 
-	wnd.requestAnimationFrame(enterFrame);
+	wnd.requestAnimationFrame( enterFrame );
 
     return {
     	to: function() { 
-    		return new Tween().to(arguments);
+    		return new Tween().to( arguments );
     	},
     	from: function() {
-    		return new Tween().from(arguments);
-    	},
-    	Sequence: Sequence
+    		return new Tween().from( arguments );
+    	}
     };
 })();
