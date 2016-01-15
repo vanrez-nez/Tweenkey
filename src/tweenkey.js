@@ -9,7 +9,7 @@ var Tweenkey = Tweenkey || (function() {
 	var objectPrototypeStr = Object.prototype.toString;
 
 	function isFunction( object ) {
-		return objectPrototypeStr.call( object ) == '[object Array]';
+		return objectPrototypeStr.call( object ) == '[object Function]';
 	}
 
 	function isObject( object ) {
@@ -29,32 +29,38 @@ var Tweenkey = Tweenkey || (function() {
 		self.running = false;
 		self.isTweenFrom = isTweenFrom;
 		self.duration = 0;
-		self.elapsedTime = 0;
+		self.startTime = 0;
 		self.props = [];
 		return self;
 	}
 
 	function updateTween(tween, dt) {
 		if ( ! tween.running ) return true;
+		
+		var target = tween.target;
 
 		// fire onStart notification
-		tween.elapsedTime === 0 && isFunction( tween.onStart ) && tween.onStart( tween );
+		if (tween.startTime === 0) {
+			tween.startTime = dt;
+			isFunction( tween.onStart ) && tween.onStart( target );
+		}
+
+		var elapsedTime = (dt - tween.startTime) / 1000;
 		
 		// update tween
-		tween.elapsedTime += dt / 1000;
 		var idx = tween.props.length;
 		while ( idx-- ) {
 			var prop = tween.props[ idx ];
-			console.log(prop);
-			//target[ prop.name ] = tween.ease(tween.duration, )
+			var progress = m.min(1, 1 - (tween.duration - elapsedTime) / tween.duration);
+			target[ prop.name ] = tween.ease( progress, prop.f, prop.t - prop.f, 1 );
 		}
 
 		// fire onUpdate notification
-		isFunction( tween.onUpdate ) && tween.onUpdate( tween )		
+		isFunction( tween.onUpdate ) && tween.onUpdate( target )		
 
-		if ( tween.elapsedTime >= tween.duration ) {
+		if ( elapsedTime >= tween.duration ) {
 			tween.running = false;
-			isFunction( tween.onComplete ) && tween.onComplete( tween );
+			isFunction( tween.onComplete ) && tween.onComplete( target );
 			return false;
 		}
 
@@ -79,7 +85,9 @@ var Tweenkey = Tweenkey || (function() {
 		tween.running = params.autoStart ? !!params.autoStart : true;
 		tween.ease = isFunction( params.ease ) ? params.ease : lerp;
 		tween.duration = m.max( 0, Number( duration ) || 0 );
-
+		tween.onStart = params.onStart;
+		tween.onUpdate = params.onUpdate;
+		tween.onComplete = params.onComplete;
 		// add remaining values inside params as properties
 		addProps( tween, params, tween.isTweenFrom );
 	}
