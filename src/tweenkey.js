@@ -100,14 +100,29 @@ var Tweenkey = Tweenkey || (function() {
 			} else {
 				console.warn( 'Invalid target:', target );
 			}
+		},
+		kill: function() {
+			this.killed = true;
+		},
+		pause: function() {
+			this.running = false;
+		},
+		resume: function() {
+			this.running = true;
 		}
 	};
 
+	function executeOnAllTweens(funcName, args) {
+		return function() {
+			for (var i = 0, len = tweens.length; i < len; i++)
+			tweens[i][funcName](args);
+		}
+	}
+
 	function enterFrame( dt ) {
-		var idx = tweens.length;
-		while( idx-- ) {
+		for (var idx = tweens.length; idx > 0; idx--)
 			var tween = tweens[ idx ];
-			if ( ! updateTween( tween, dt ) ) {
+			if ( tween.killed || ! updateTween( tween, dt ) ) {
 				tweens.splice(idx, 1);
 			}
 		}
@@ -156,6 +171,9 @@ var Tweenkey = Tweenkey || (function() {
     	from: function() {
     		var tween = new Tween( true );
     		return tween.set.apply( tween, arguments );
-    	}
+    	},
+    	killAll: executeOnAllTweens('kill'),
+    	pauseAll: executeOnAllTweens('pause'),
+    	resumeAll: executeOnAllTweens('resume')
     };
 })();
