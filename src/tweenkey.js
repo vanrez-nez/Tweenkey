@@ -51,7 +51,7 @@ var Tweenkey = Tweenkey || (function() {
 		var idx = tween.props.length;
 		while ( idx-- ) {
 			var prop = tween.props[ idx ];
-			var progress = m.min(1, 1 - (tween.duration - elapsedTime) / tween.duration);
+			var progress = m.min( 1, 1 - ( tween.duration - elapsedTime ) / tween.duration );
 			target[ prop.name ] = tween.ease( progress, prop.f, prop.t - prop.f, 1 );
 		}
 
@@ -82,7 +82,7 @@ var Tweenkey = Tweenkey || (function() {
 	function initTween(tween, target, duration, params) {
 		params =  params || {};
 		tween.target = target;
-		tween.running = params.autoStart ? !!params.autoStart : true;
+		tween.running = params.autoStart !== undefined ? !!params.autoStart : true;
 		tween.ease = isFunction( params.ease ) ? params.ease : lerp;
 		tween.duration = m.max( 0, Number( duration ) || 0 );
 		tween.onStart = params.onStart;
@@ -100,6 +100,7 @@ var Tweenkey = Tweenkey || (function() {
 			} else {
 				console.warn( 'Invalid target:', target );
 			}
+			return this;
 		},
 		kill: function() {
 			this.killed = true;
@@ -115,12 +116,12 @@ var Tweenkey = Tweenkey || (function() {
 	function executeOnAllTweens(funcName, args) {
 		return function() {
 			for (var i = 0, len = tweens.length; i < len; i++)
-			tweens[i][funcName](args);
+				tweens[i][funcName](args);
 		}
 	}
 
 	function enterFrame( dt ) {
-		for (var idx = tweens.length; idx > 0; idx--)
+		for (var idx = tweens.length - 1; idx > -1; idx--) {
 			var tween = tweens[ idx ];
 			if ( tween.killed || ! updateTween( tween, dt ) ) {
 				tweens.splice(idx, 1);

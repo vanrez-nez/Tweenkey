@@ -23,6 +23,30 @@
 	    return "#"+((1<<24)*Math.random()|0).toString(16);
 	}
 
+
+	var circle = { radius: 0 };
+	var t = Tweenkey.to( circle, 10, { radius: 20, autoStart: false, onUpdate: function(obj) {
+		console.log(obj);
+	}} );
+
+	setTimeout(function() {
+		console.log('resuming');
+		t.resume();
+	}, 500);
+
+	setTimeout(function() {
+		console.log('pausing');
+		t.pause();
+	}, 1000);
+
+	setTimeout(function() {
+		console.log('killing');
+		t.kill();
+	}, 2000);
+
+
+
+/*
 	for (var i = 0; i < 100; i++) {
 		var circle = { radius: 0 };
 		
@@ -37,6 +61,7 @@
 	    	}
 	    });
 	}
+	*/
 
     
 })();
