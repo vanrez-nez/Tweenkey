@@ -30,6 +30,7 @@ var Tweenkey = Tweenkey || (function() {
 		self.isTweenFrom = isTweenFrom;
 		self.duration = 0;
 		self.startTime = 0;
+		self.delay = 0;
 		self.props = [];
 		return self;
 	}
@@ -93,7 +94,7 @@ var Tweenkey = Tweenkey || (function() {
 	}
 
 	Tween.prototype = {
-		set: function( target, duration, params ) {
+		init: function( target, duration, params ) {
 			if ( isObject( target ) ) {
 				initTween( this, target, duration, params );
 				tweens.push( this );
@@ -101,6 +102,9 @@ var Tweenkey = Tweenkey || (function() {
 				console.warn( 'Invalid target:', target );
 			}
 			return this;
+		},
+		set: function() {
+
 		},
 		kill: function() {
 			this.killed = true;
@@ -172,6 +176,9 @@ var Tweenkey = Tweenkey || (function() {
     	from: function() {
     		var tween = new Tween( true );
     		return tween.set.apply( tween, arguments );
+    	},
+    	set: function() {
+    		
     	},
     	killAll: executeOnAllTweens('kill'),
     	pauseAll: executeOnAllTweens('pause'),
