@@ -24,13 +24,13 @@ var Tweenkey = Tweenkey || (function() {
 		return c * t / d + b;
 	}
 
-	function Tween( isTweenFrom ) {
+	function Tween( isTweenFrom, delay ) {
 		var self = this;
 		self.running = false;
 		self.isTweenFrom = isTweenFrom;
 		self.duration = 0;
 		self.startTime = 0;
-		self.delay = 0;
+		self.delay = delay;
 		self.props = [];
 		return self;
 	}
@@ -86,6 +86,7 @@ var Tweenkey = Tweenkey || (function() {
 		tween.running = params.autoStart !== undefined ? !!params.autoStart : true;
 		tween.ease = isFunction( params.ease ) ? params.ease : lerp;
 		tween.duration = m.max( 0, Number( duration ) || 0 );
+		tween.delay = params.delay || 0;
 		tween.onStart = params.onStart;
 		tween.onUpdate = params.onUpdate;
 		tween.onComplete = params.onComplete;
@@ -94,7 +95,7 @@ var Tweenkey = Tweenkey || (function() {
 	}
 
 	Tween.prototype = {
-		init: function( target, duration, params ) {
+		define: function( target, duration, params ) {
 			if ( isObject( target ) ) {
 				initTween( this, target, duration, params );
 				tweens.push( this );
@@ -102,9 +103,6 @@ var Tweenkey = Tweenkey || (function() {
 				console.warn( 'Invalid target:', target );
 			}
 			return this;
-		},
-		set: function() {
-
 		},
 		kill: function() {
 			this.killed = true;
@@ -132,6 +130,14 @@ var Tweenkey = Tweenkey || (function() {
 			}
 		}
 		rAF( enterFrame );
+	}
+
+	function newTweenFactory() {
+		var factoryFn = Tween.bind.apply(Tween, arguments);
+		return function create() {
+			var tween = new factoryFn();
+			return tween.define.apply(tween, arguments);
+		};
 	}
 
 	// taken from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
@@ -169,17 +175,9 @@ var Tweenkey = Tweenkey || (function() {
 	rAF( enterFrame );
 
     return {
-    	to: function() {
-    		var tween = new Tween( false );
-    		return tween.set.apply( tween, arguments );
-    	},
-    	from: function() {
-    		var tween = new Tween( true );
-    		return tween.set.apply( tween, arguments );
-    	},
-    	set: function() {
-    		
-    	},
+    	set: newTweenFactory( false ),
+    	to: newTweenFactory( false ),
+    	from: newTweenFactory( true ),
     	killAll: executeOnAllTweens('kill'),
     	pauseAll: executeOnAllTweens('pause'),
     	resumeAll: executeOnAllTweens('resume')
