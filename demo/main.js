@@ -24,9 +24,10 @@
 	}
 
 
+/*
 	var circle = { radius: 0 };
 	var t = Tweenkey.to( circle, 10, { radius: 20, autoStart: false, onUpdate: function(obj) {
-		console.log(obj);
+		//console.log(obj);
 	}} );
 
 	setTimeout(function() {
@@ -44,6 +45,38 @@
 		t.kill();
 	}, 2000);
 
+
+	setTimeout(function() {
+		var obj = { x: 0 }
+		Tweenkey.set(obj, { x: 1, onComplete: function(o) {
+			console.log('completed:', o);
+			} 
+		});
+
+		var obj2 = { x2: 0 };
+		Tweenkey.set(obj2, { x2: 1, onComplete: function(o) {
+			console.log('completed:', o);
+			} 
+		});
+
+	}, 600);
+	*/
+
+
+	setTimeout(function() {
+		var obj = { x: 0 };
+
+		Tweenkey.fromTo(obj,
+			{
+				x: 1,
+				onComplete: function(o) { console.log('completed:', o); }
+			},{
+				x: 3,
+				onComplete: function(o) { console.log('completed:', o); }
+			}
+		);
+
+	}, 100);
 
 
 /*
