@@ -66,7 +66,7 @@
 	setTimeout(function() {
 		var obj = { x: 0 };
 
-		Tweenkey.fromTo(obj,
+		Tweenkey.fromTo(obj, 0.3,
 			{
 				x: 1,
 				onComplete: function(o) { console.log('completed:', o); }

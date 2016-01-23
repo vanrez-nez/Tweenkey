@@ -7,6 +7,11 @@ var Tweenkey = Tweenkey || (function() {
 	var m = Math;
 	var wnd = window;
 
+	var TWEEN_SET = [''];
+	var TWEEN_TO = [''];
+	var TWEEN_FROM = [''];
+	var TWEEN_FROM_TO = [''];
+
 	function getTypeCheck( typeStr ) {
 		return function( object ) {
 			return Object.prototype.toString.call( object ) == '[object ' + typeStr + ']';
@@ -24,13 +29,13 @@ var Tweenkey = Tweenkey || (function() {
 		}
 	};
 	
-	function Tween( isTweenFrom, delay ) {
+	function Tween( type ) {
 		var self = this;
 		self.running = false;
-		self.isTweenFrom = isTweenFrom;
+		self.type = type;
 		self.duration = 0;
 		self.startTime = 0;
-		self.delay = delay;
+		self.delay = 0;
 		self.props = [];
 		return self;
 	}
@@ -75,26 +80,49 @@ var Tweenkey = Tweenkey || (function() {
 		return true;
 	}
 
-	function addProps( tween, params, reverse) {
-		for ( var p in params ) {
-			if ( !tween[ p ] && _globals.isNumber( tween.target[ p ] ) ) {
-				var prop = { name: p, 'f': tween.target[ p ], 't': params[ p ]};
+	/*
+	 * Pushes all the properties to tween into the tween.props array 
+	 */
+	function addProps( tween, propertiesFromTo, overrideFromProperties ) {
+		
+		// If is a FromTo tween override fromParams
+		var fromParams = overrideFromProperties || tween.target;
+		for ( var p in toParams ) {
 
-				// swap from and to values if reverse flag
-				reverse && ( prop.t = [ prop.f, prop.f = prop.t ][ 0 ] );
+			// Tweeneable param names can only be numbers and not reserved properties
+			if ( !tween[ p ] && _globals.isNumber( fromParams[ p ] ) ) {
+				var prop = {
+					name: p,
+					'f': fromParams[ p ],
+					't': toParams[ p ]
+				};
+
+				// swap from and to values if is tween from
+				tween.type == TWEEN_FROM && ( prop.t = [ prop.f, prop.f = prop.t ][ 0 ] );
 				tween.props.push( prop );
 			}
 		}
 	}
 
-	function initTween(tween, target, duration, params) {
-		params =  params || {};
-		
-		tween.target = target;
-		tween.running = params.autoStart !== undefined ? !!params.autoStart : true;
+	function initParams( params ) {
 
-		tween.ease = _globals.isFunction( params.ease ) ? params.ease : _globals.lerp;
-		tween.duration = _globals.isNumber(duration) ? m.max( 0, duration ) : 0;
+	}
+
+	function initTween( tween, target, params ) {
+		tween.target = target;
+
+		// parse arguments after target
+		var duration = params.shift();
+		var params1 = params.shift();
+		var params2 = params.shift();
+
+		// if duration is an object? then is a set, swap to params1 and set duration to 0
+		_globals.isObject(duration) && (params1 = duration) && (duration = 0);
+		
+		
+		tween.running = params.autoStart !== undefined ? !!params.autoStart : true;
+		tween.ease = _globals.isFunction( params1.ease ) ? params.ease : _globals.lerp;
+		tween.duration = _globals.isNumber( duration ) ? m.max( 0, duration ) : 0;
 		tween.delay = _globals.isNumber(duration) ? m.max( 0, duration ) : 0;
 
 		tween.onStart = params.onStart;
@@ -102,18 +130,17 @@ var Tweenkey = Tweenkey || (function() {
 		tween.onComplete = params.onComplete;
 		
 		// add remaining values inside params as properties
-		addProps( tween, params, tween.isTweenFrom );
+		addProps( tween, params );
 	}
 
 	Tween.prototype = {
-		define: function( target, duration, params ) {
+		define: function( params ) {
+			var target = params.shift();
 			if ( _globals.isObject( target ) ) {
-				console.log('define params:', params);
-				// if duration is an object? then is a set, swap to params and set duration to 0
-				_globals.isObject(duration) && (params = duration) && (duration = 0);
 
-				initTween( this, target, duration, params );
+				initTween( this, target, params );
 				tweens.push( this );
+			
 			} else {
 				console.warn( 'Invalid target:', target );
 			}
@@ -150,11 +177,13 @@ var Tweenkey = Tweenkey || (function() {
 		rAF( enterFrame );
 	}
 
-	function newTweenFactory() {
-		var factoryFn = Tween.bind.apply( Tween, arguments );
+	function newTweenFactory( type ) {
+		
+		var factoryFn = Tween.bind.apply( Tween, [ type ] );
 		return function create() {
 			var tween = new factoryFn();
-			return tween.define.apply( tween, arguments );
+			return tween.define.call( tween, [].slice.call(arguments) );
+		
 		};
 	}
 
@@ -194,10 +223,10 @@ var Tweenkey = Tweenkey || (function() {
 	rAF( enterFrame );
 
     return {
-    	set: newTweenFactory(),
-    	to: newTweenFactory(),
-    	from: newTweenFactory( true ),
-    	fromTo: newTweenFactory(),
+    	set: newTweenFactory( TWEEN_SET ),
+    	to: newTweenFactory( TWEEN_TO ),
+    	from: newTweenFactory( TWEEN_FROM ),
+    	fromTo: newTweenFactory( TWEEN_FROM_TO ),
     	killAll: executeOnAllTweens( 'kill' ),
     	pauseAll: executeOnAllTweens( 'pause' ),
     	resumeAll: executeOnAllTweens( 'resume' )
