@@ -14,6 +14,7 @@ var Tweenkey = Tweenkey || (function() {
 	var S_FNC = 'Function';
 	var S_ARR = 'Array';
 	var S_NUM = 'Number';
+	var S_BOOL = 'Boolean';
 
 	// Constants to ID the constructor types in factory
 	// PARAMS is the minimum signature for allowed parameters
@@ -24,7 +25,7 @@ var Tweenkey = Tweenkey || (function() {
 
 	function getTypeCheck( typeStr ) {
 		return function( object ) {
-			return TYPE_FNC( object ) == '[object ' + typeStr + ']';
+			return TYPE_FNC.call( object ) == '[object ' + typeStr + ']';
 		}
 	}
 
@@ -34,12 +35,13 @@ var Tweenkey = Tweenkey || (function() {
 		isObject: 	getTypeCheck( S_OBJ ),
 		isArray: 	getTypeCheck( S_ARR ),
 		isNumber: 	getTypeCheck( S_NUM ),
+		isBoolean: 	getTypeCheck( S_BOOL ), 
 		lerp: function( t, b, c, d ) {
 			return c * t / d + b;
 		},
 		extend: function( target, source, overwrite ) {
 			for ( var key in source )
-				overwrite || !( key in target ) && ( target[ key ] = source[ key ] );
+				( overwrite || !( key in target ) ) && ( target[ key ] = source[ key ] );
 			return target;
 		},
 		signatureEquals: function( argumentsArray, signature ) {
@@ -51,21 +53,19 @@ var Tweenkey = Tweenkey || (function() {
 	};
 	
 	function Tween(type) {
-		console.log(arguments, type);
-
 		_globals.extend( this, {
-			_running: false,
 			_type: type,
-			_duration: 0,
 			_startTime: 0,
-			_delay: 0,
 			_props: []
 		} );
 
-		//return this;
+		return this;
 	}
 
-	function updateTween(tween, dt) {
+	/*
+	* Returns whether the tween should be keeped alive or not
+	*/
+	function updateTween( tween, dt ) {
 		if ( ! tween._running ) return true;
 		
 		var target = tween._target;
@@ -108,18 +108,19 @@ var Tweenkey = Tweenkey || (function() {
 	/*
 	 * Pushes all the properties to tween into the tween.props array 
 	 */
-	function addProps( tween, propertiesFromTo, overrideFromProperties ) {
+	function addProps( tween, propertiesTo, overrideFrom ) {
 		
 		// If is a FromTo tween override fromParams
-		var fromParams = overrideFromProperties || tween._target;
-		for ( var p in toParams ) {
+		var fromParams = overrideFrom || tween._target;
+
+		for ( var p in propertiesTo ) {
 
 			// Tweeneable param names can only be numbers and not reserved properties
-			if ( !tween[ p ] && _globals.isNumber( fromParams[ p ] ) ) {
+			if ( !tween[ p ] && _globals.isNumber( propertiesTo[ p ] ) ) {
 				var prop = {
 					name: p,
 					'f': fromParams[ p ],
-					't': toParams[ p ]
+					't': propertiesTo[ p ]
 				};
 
 				// swap from and to values if is tween from
@@ -127,6 +128,7 @@ var Tweenkey = Tweenkey || (function() {
 				tween._props.push( prop );
 			}
 		}
+		console.log('Params:', tween._props);
 	}
 
 	function initParams( params ) {
@@ -134,30 +136,29 @@ var Tweenkey = Tweenkey || (function() {
 	}
 
 	function initTween( tween, target, params ) {
-		tween.target = target;
-		console.log( 'orray' );
+		tween._target = target;
 
-		/*
-		// parse arguments after target
 		var duration = params.shift();
 		var params1 = params.shift();
 		var params2 = params.shift();
 
-		// if duration is an object? then is a set, swap to params1 and set duration to 0
+		// swap duration to params1 if no duration was defined (Tween.set)
 		_globals.isObject(duration) && (params1 = duration) && (duration = 0);
-		
-		tween.running = params.autoStart !== undefined ? !!params.autoStart : true;
-		tween.ease = _globals.isFunction( params1.ease ) ? params.ease : _globals.lerp;
-		tween.duration = _globals.isNumber( duration ) ? m.max( 0, duration ) : 0;
-		tween.delay = _globals.isNumber(duration) ? m.max( 0, duration ) : 0;
 
-		tween.onStart = params.onStart;
-		tween.onUpdate = params.onUpdate;
-		tween.onComplete = params.onComplete;
-		
-		// add remaining values inside params as properties
-		addProps( tween, params );
-		*/
+		// select special params
+		var sParams = params2 || params1;
+
+		_globals.extend( tween, {
+			_duration: 		_globals.isNumber( duration ) ? m.max( 0, duration ) : 0,
+			_running: 		_globals.isBoolean( sParams.autoStart ) ? sParams.autoStart : true,
+			_ease: 			_globals.isFunction( sParams.ease ) ? sParams.ease : _globals.lerp,
+			_delay: 		_globals.isNumber( sParams.delay ) ? m.max( 0, delay ) : 0,
+			_onStart: 		sParams.onStart,
+			_onUpdate: 		sParams.onUpdate,
+			_onComplete: 	sParams.onComplete
+		}, true);
+
+		addProps( tween, params1, params2 );
 	}
 
 	Tween.prototype = {
@@ -169,7 +170,7 @@ var Tweenkey = Tweenkey || (function() {
 
 			if ( _globals.isObject( target ) && validParams ) {
 				initTween( this, target, params );
-				//tweens.push( this );
+				tweens.push( this );
 			
 			} else {
 				console.warn( 'Invalid tween parameters:', params );
@@ -205,7 +206,7 @@ var Tweenkey = Tweenkey || (function() {
 		
 		// update tweens
 		for ( var idx = 0, length = tweens.length; idx < length; idx++ )
-			tweens[ idx ]._killed = updateTween( tweens[ idx ], dt );
+			tweens[ idx ]._killed = ! updateTween( tweens[ idx ], dt );
 
 		rAF( enterFrame );
 	}
@@ -220,6 +221,10 @@ var Tweenkey = Tweenkey || (function() {
 			var tween = new factoryFn();
 			return tween.define.call( tween, [].slice.call( arguments ) );
 		};
+	}
+
+	function cancel() {
+		cAF();
 	}
 
 	// taken from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
