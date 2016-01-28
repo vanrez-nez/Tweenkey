@@ -82,6 +82,7 @@
 	t.resume();
 	*/
 
+/*
 
 	var updates = 0;
 	var completed = 0;
@@ -105,11 +106,11 @@
 		console.log('Updates:', updates, 'Completed:', completed);
 	}, 2000)
 	
-
+*/
 
 
 	var d = { x: 0 };
-	//Tweenkey.to( d, 1, { x: 1 });
+	Tweenkey.to( d, 10, { x: 1, onUpdate: function(t) { console.log(t) } } );
 
 	/*
 

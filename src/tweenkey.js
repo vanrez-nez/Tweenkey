@@ -77,6 +77,7 @@ var Tweenkey = Tweenkey || (function() {
 		if ( tween._delayLeft == 0 ) {
 
 			if ( tween._elapsedTime == 0 ) {
+				
 				// fire onStart notification
 				tween._onStart()
 			}
@@ -218,25 +219,19 @@ var Tweenkey = Tweenkey || (function() {
 	}
 
 	function enterFrame( timeStamp ) {
-		//console.time("Frame Time");
 
-		var dt = (timeStamp - lastTime) / 1000;
+		var dt = m.min( ( timeStamp - lastTime ) / 1000, 0.016 );
 		lastTime = timeStamp;
 
 		// clear killed tweens
 		for ( var idx = tweens.length -1 ; idx > 0; idx-- )
 			! tweens[ idx ]._alive && tweens.splice( idx, 1 );
 		
-		
 		// update tweens
 		for ( var idx = 0, length = tweens.length; idx < length; idx++ )
 			tweens[ idx ]._active && updateTween( tweens[ idx ], dt );
-		//console.timeEnd("Frame Time");
 
-		//
-		//setTimeout(function() {
-			rAF( enterFrame );	
-		//}, 500);
+		rAF( enterFrame );	
 
 	}
 
@@ -256,7 +251,7 @@ var Tweenkey = Tweenkey || (function() {
 		cAF();
 	}
 
-	// taken from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
+	// borrowed from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
 	(function shimAnimationFrame() {
 		var vendors, a, b, c, i, now, dt, then;
 

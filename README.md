@@ -2,7 +2,7 @@
 Micro animation library for javascript.
 
 ## WIP Features:
-- [ ] Pause tween engine when browser tab becomes inactive.
+- [X] Pause tween engine when browser tab becomes inactive.
 - [ ] Handle array of objects as the target param.
 - [ ] Handle multiple active tweens into the same object.
 - [ ] Add plugin support.
