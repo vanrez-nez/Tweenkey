@@ -6,6 +6,7 @@ var Tweenkey = Tweenkey || (function() {
 	var tweens = [];
 	var m = Math;
 	var wnd = window;
+	var lastTime = 0;
 
 	var TYPE_FNC = Object.prototype.toString;
 
@@ -35,7 +36,10 @@ var Tweenkey = Tweenkey || (function() {
 		isObject: 	getTypeCheck( S_OBJ ),
 		isArray: 	getTypeCheck( S_ARR ),
 		isNumber: 	getTypeCheck( S_NUM ),
-		isBoolean: 	getTypeCheck( S_BOOL ), 
+		isBoolean: 	getTypeCheck( S_BOOL ),
+		now: function() {
+			return +new Date();
+		},
 		lerp: function( t, b, c, d ) {
 			return c * t / d + b;
 		},
@@ -55,7 +59,6 @@ var Tweenkey = Tweenkey || (function() {
 	function Tween(type) {
 		_globals.extend( this, {
 			_type: type,
-			_startTime: 0,
 			_props: []
 		} );
 
@@ -66,43 +69,45 @@ var Tweenkey = Tweenkey || (function() {
 	* Returns whether the tween should be keeped alive or not
 	*/
 	function updateTween( tween, dt ) {
-		if ( ! tween._running ) return true;
 		
 		var target = tween._target;
-
-		// fire onStart notification
-		if (tween._startTime === 0) {
-			tween._startTime = dt;
-			_globals.isFunction( tween._onStart ) && tween._onStart( target );
-		}
-
-		var elapsedTime = (dt - tween._startTime) / 1000;
 		
-		// update tween props
-		var idx = tween._props.length;
-		while ( idx-- ) {
-			var prop = tween._props[ idx ];
+		tween._delayLeft = m.max( tween._delayLeft - dt, 0 );
+		
+		if ( tween._delayLeft == 0 ) {
 
-			// default progress for tween.set
-			var progress = 1;
-			if ( tween._duration > 0 ) {
-				progress = m.min( 1, 1 - ( tween._duration - elapsedTime ) / tween._duration );
+			if ( tween._elapsedTime == 0 ) {
+				// fire onStart notification
+				tween._onStart()
 			}
-			 
-			target[ prop.name ] = tween._ease( progress, prop.f, prop.t - prop.f, 1 );
+			
+			tween._elapsedTime += dt;
+
+			// update tween props
+			var idx = tween._props.length;
+			while ( idx-- ) {
+				var prop = tween._props[ idx ];
+
+				// default progress for tween.set
+				tween._progress = 1;
+				if ( tween._duration > 0 ) {
+					tween._progress = m.min( 1, tween._elapsedTime / tween._duration );
+				}
+				 
+				target[ prop.name ] = tween._ease( tween._progress, prop.f, prop.t - prop.f, 1 );
+			}
+
+			// fire onUpdate notification
+			tween._onUpdate();
 		}
-
-		// fire onUpdate notification
-		_globals.isFunction( tween._onUpdate ) && tween._onUpdate( target )		
-
+		
 		// kill tween?
-		if ( elapsedTime >= tween._duration ) {
-			tween._running = false;
-			_globals.isFunction( tween._onComplete ) && tween._onComplete( target );
-			return false;
+		if ( tween._elapsedTime >= tween._duration ) {
+			tween._alive && tween._onComplete();
+			// loop count validation should be in here
+			tween.kill();
 		}
 
-		return true;
 	}
 
 	/*
@@ -124,15 +129,18 @@ var Tweenkey = Tweenkey || (function() {
 				};
 
 				// swap from and to values if is tween from
-				tween._type == TWEEN_FROM && ( prop.t = [ prop.f, prop.f = prop.t ][ 0 ] );
+				if (tween._type == TWEEN_FROM || tween._type == TWEEN_FROM_TO)
+					prop.t = [ prop.f, prop.f = prop.t ][ 0 ];
 				tween._props.push( prop );
 			}
 		}
-		console.log('Params:', tween._props);
 	}
 
-	function initParams( params ) {
-
+	function createCallback( cb, tween ) {
+		var valid = _globals.isFunction( cb );
+		return function() {
+			valid && cb.call( tween, tween._target );
+		}
 	}
 
 	function initTween( tween, target, params ) {
@@ -143,20 +151,26 @@ var Tweenkey = Tweenkey || (function() {
 		var params2 = params.shift();
 
 		// swap duration to params1 if no duration was defined (Tween.set)
-		_globals.isObject(duration) && (params1 = duration) && (duration = 0);
+		_globals.isObject( duration ) && ( params1 = duration ) && ( duration = 0 );
 
 		// select special params
 		var sParams = params2 || params1;
 
+		// initialize tween properties
+		var delay = _globals.isNumber( sParams.delay ) ? m.max( 0, sParams.delay ) : 0;
 		_globals.extend( tween, {
+			_progress: 		0,
+			_elapsedTime: 	0,
+			_alive: 		true,
 			_duration: 		_globals.isNumber( duration ) ? m.max( 0, duration ) : 0,
-			_running: 		_globals.isBoolean( sParams.autoStart ) ? sParams.autoStart : true,
+			_active: 		_globals.isBoolean( sParams.autoStart ) ? sParams.autoStart : true,
 			_ease: 			_globals.isFunction( sParams.ease ) ? sParams.ease : _globals.lerp,
-			_delay: 		_globals.isNumber( sParams.delay ) ? m.max( 0, delay ) : 0,
-			_onStart: 		sParams.onStart,
-			_onUpdate: 		sParams.onUpdate,
-			_onComplete: 	sParams.onComplete
-		}, true);
+			_delay: 		delay,
+			_delayLeft: 	delay,
+			_onStart: 		createCallback( sParams.onStart, tween ),
+			_onUpdate: 		createCallback( sParams.onUpdate, tween ),
+			_onComplete: 	createCallback( sParams.onComplete, tween )
+		}, true );
 
 		addProps( tween, params1, params2 );
 	}
@@ -178,16 +192,21 @@ var Tweenkey = Tweenkey || (function() {
 			return this;
 		},
 		delay: function( seconds ) {
-			this.delay = seconds
+			this._delayLeft = this._delay = seconds;
+			return this;
 		},
 		kill: function() {
-			this._killed = true;
+			this._active = false;
+			this._alive = false;
+			return this;
 		},
 		pause: function() {
-			this._running = false;
+			this._active = false;
+			return this;
 		},
 		resume: function() {
-			this._running = true;
+			this._active = true;
+			return this;
 		}
 	};
 
@@ -198,17 +217,27 @@ var Tweenkey = Tweenkey || (function() {
 		}
 	}
 
-	function enterFrame( dt ) {
+	function enterFrame( timeStamp ) {
+		//console.time("Frame Time");
+
+		var dt = (timeStamp - lastTime) / 1000;
+		lastTime = timeStamp;
 
 		// clear killed tweens
 		for ( var idx = tweens.length -1 ; idx > 0; idx-- )
-			tweens[ idx ]._killed && tweens.splice(idx, 1);
+			! tweens[ idx ]._alive && tweens.splice( idx, 1 );
+		
 		
 		// update tweens
 		for ( var idx = 0, length = tweens.length; idx < length; idx++ )
-			tweens[ idx ]._killed = ! updateTween( tweens[ idx ], dt );
+			tweens[ idx ]._active && updateTween( tweens[ idx ], dt );
+		//console.timeEnd("Frame Time");
 
-		rAF( enterFrame );
+		//
+		//setTimeout(function() {
+			rAF( enterFrame );	
+		//}, 500);
+
 	}
 
 	function newTweenFactory() {
@@ -246,7 +275,7 @@ var Tweenkey = Tweenkey || (function() {
 
 		// do we really need this fallback?
 		rAF = rAF || function( callback ) {
-			now = +new Date();
+			now = _globals.now();
 			dt = m.max( 0, 16 - ( now - then ) );
 			id = setTimeout( function() {
 				callback( now + dt );

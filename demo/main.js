@@ -62,17 +62,54 @@
 	}, 600);
 	*/
 
-	var a = { x: 0 };
-	Tweenkey.set( a, { x: 1 } );
-
-	var b = { x: 0 };
-	Tweenkey.to( b, { x: 1 });
+	/*
 
 	var c = { x: 0 };
-	Tweenkey.fromTo( c, 1, { x: 1 }, { x: 2, onUpdate: function(o) { console.log('U:', o); } });
+	var t = Tweenkey.fromTo( c, 5, { x: 0 }, { x: 1, 
+		onUpdate: function(o) {
+			console.log('Update:', o);
+		},
+		onStart: function(o) {
+			console.log('Starting!');
+		},
+		onComplete: function(o) {
+			console.log('Complete!:', o);
+		},
+		autoStart: false,
+		delay: 3,
+	}).delay(3);
+	t.delay(1);
+	t.resume();
+	*/
+
+
+	var updates = 0;
+	var completed = 0;
+	for (var i = 0; i < 1000; i++) {
+		//console.log('creating tween');
+		var obj = {x:0};
+		Tweenkey.to(obj, Math.random() * 20 + 5, {
+			onUpdate: function() {
+				updates++;
+			},
+			onComplete: function() {
+				completed++;
+			},
+			x: Math.random() * 100 + 1,
+			ease: easeInQuad,
+			autoStart: true
+		})
+	}
+
+	setInterval(function() {
+		console.log('Updates:', updates, 'Completed:', completed);
+	}, 2000)
+	
+
+
 
 	var d = { x: 0 };
-	Tweenkey.to( d, 1, { x: 1 });
+	//Tweenkey.to( d, 1, { x: 1 });
 
 	/*
 
