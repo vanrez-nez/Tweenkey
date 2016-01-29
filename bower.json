@@ -2,7 +2,7 @@
   "name": "Tweenkey",
   "version": "0.0.1",
   "homepage": "https://github.com/radixzz/Tweenkey",
-  "description": "Modern tweening engine for Javascript.",
+  "description": "A modern tweening engine for Javascript.",
   "main": "dist/tweenkey.min.js",
   "moduleType": [
     "amd",
@@ -12,8 +12,10 @@
   "keywords": [
     "Animation",
     "tween",
+    "timeline",
+    "interpolation",
     "motion",
-    "performance."
+    "performance"
   ],
   "authors": [
     "Iván Juárez Núñez"

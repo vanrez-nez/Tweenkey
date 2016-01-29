@@ -10,15 +10,14 @@ var Tweenkey = Tweenkey || (function() {
 
 	var TYPE_FNC = Object.prototype.toString;
 
-	// String constants
+	// Type constants
 	var S_FNC = 'F';
 	var S_ARR = 'A';
 	var S_NUM = 'N';
 	var S_BOOL = 'B';
 	var S_OBJ = 'O';
 
-	// Constants to ID the constructor types in factory
-	// PARAMS is the minimum signature for allowed parameters
+	// Define an array of types for each tween to validate parameters
 	var TWEEN_SET 		= [ S_OBJ ];
 	var TWEEN_TO 		= [ S_NUM, S_OBJ ];
 	var TWEEN_FROM 		= [ S_NUM, S_OBJ ];
@@ -26,7 +25,7 @@ var Tweenkey = Tweenkey || (function() {
 
 	function getTypeCheck( typeStr ) {
 		return function( object ) {
-			return TYPE_FNC.call( object )[8] == typeStr;
+			return TYPE_FNC.call( object )[ 8 ] == typeStr;
 		}
 	}
 
@@ -50,7 +49,7 @@ var Tweenkey = Tweenkey || (function() {
 		},
 		signatureEquals: function( argumentsArray, signature ) {
 			var sig = argumentsArray.reduce( function( last, current ) {
-				return last + ':' + TYPE_FNC.call( current )[8];
+				return last + ':' + TYPE_FNC.call( current )[ 8 ];
 			}, '').slice( 1 );
 			return sig == signature;
 		}
@@ -298,25 +297,25 @@ var Tweenkey = Tweenkey || (function() {
 })();
 
 // UMD
-(function (root) {
+( function ( root ) {
 
-	if (typeof define === 'function' && define.amd) {
+	if ( typeof define === 'function' && define.amd ) {
 
 		// AMD
-		define([], function () {
+		define( [], function () {
 			return Tweenkey;
-		});
+		} );
 
-	} else if (typeof module !== 'undefined' && typeof exports === 'object') {
+	} else if ( typeof module !== 'undefined' && typeof exports === 'object' ) {
 
 		// Node.js
 		module.exports = Tweenkey;
 
-	} else if (root !== undefined) {
+	} else if ( root !== undefined ) {
 
 		// Global variable
 		root.Tweenkey = Tweenkey;
 
 	}
 
-})(this);
+} )( this );
