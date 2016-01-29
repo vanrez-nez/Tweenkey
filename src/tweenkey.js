@@ -11,11 +11,11 @@ var Tweenkey = Tweenkey || (function() {
 	var TYPE_FNC = Object.prototype.toString;
 
 	// String constants
-	var S_OBJ = 'Object';
-	var S_FNC = 'Function';
-	var S_ARR = 'Array';
-	var S_NUM = 'Number';
-	var S_BOOL = 'Boolean';
+	var S_FNC = 'F';
+	var S_ARR = 'A';
+	var S_NUM = 'N';
+	var S_BOOL = 'B';
+	var S_OBJ = 'O';
 
 	// Constants to ID the constructor types in factory
 	// PARAMS is the minimum signature for allowed parameters
@@ -26,7 +26,7 @@ var Tweenkey = Tweenkey || (function() {
 
 	function getTypeCheck( typeStr ) {
 		return function( object ) {
-			return TYPE_FNC.call( object ) == '[object ' + typeStr + ']';
+			return TYPE_FNC.call( object )[8] == typeStr;
 		}
 	}
 
@@ -50,7 +50,7 @@ var Tweenkey = Tweenkey || (function() {
 		},
 		signatureEquals: function( argumentsArray, signature ) {
 			var sig = argumentsArray.reduce( function( last, current ) {
-				return last + ':' + TYPE_FNC.call( current ).slice( 8, -1 );
+				return last + ':' + TYPE_FNC.call( current )[8];
 			}, '').slice( 1 );
 			return sig == signature;
 		}
