@@ -1,0 +1,29 @@
+{
+  "name": "Tweenkey",
+  "version": "0.0.1",
+  "homepage": "https://github.com/radixzz/Tweenkey",
+  "description": "Modern tweening engine for Javascript.",
+  "main": "dist/tweenkey.min.js",
+  "moduleType": [
+    "amd",
+    "globals",
+    "node"
+  ],
+  "keywords": [
+    "Animation",
+    "tween",
+    "motion",
+    "performance."
+  ],
+  "authors": [
+    "Iván Juárez Núñez"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}
