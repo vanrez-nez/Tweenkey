@@ -19,10 +19,10 @@ var Tweenkey = Tweenkey || (function() {
 
 	// Constants to ID the constructor types in factory
 	// PARAMS is the minimum signature for allowed parameters
-	var TWEEN_SET 		= { PARAMS: [ S_OBJ ] };
-	var TWEEN_TO 		= { PARAMS: [ S_NUM, S_OBJ ] };
-	var TWEEN_FROM 		= { PARAMS: [ S_NUM, S_OBJ ] };
-	var TWEEN_FROM_TO 	= { PARAMS: [ S_NUM, S_OBJ, S_OBJ ] };
+	var TWEEN_SET 		= [ S_OBJ ];
+	var TWEEN_TO 		= [ S_NUM, S_OBJ ];
+	var TWEEN_FROM 		= [ S_NUM, S_OBJ ];
+	var TWEEN_FROM_TO 	= [ S_NUM, S_OBJ, S_OBJ ];
 
 	function getTypeCheck( typeStr ) {
 		return function( object ) {
@@ -181,7 +181,7 @@ var Tweenkey = Tweenkey || (function() {
 			var target = params.shift();
 
 			// Compare params signature
-			var validParams = _globals.signatureEquals( params, this._type.PARAMS.join( ':' ) );
+			var validParams = _globals.signatureEquals( params, this._type.join( ':' ) );
 
 			if ( _globals.isObject( target ) && validParams ) {
 				initTween( this, target, params );
@@ -296,3 +296,27 @@ var Tweenkey = Tweenkey || (function() {
     	resumeAll: executeOnAllTweens( 'resume' )
     };
 })();
+
+// UMD
+(function (root) {
+
+	if (typeof define === 'function' && define.amd) {
+
+		// AMD
+		define([], function () {
+			return Tweenkey;
+		});
+
+	} else if (typeof module !== 'undefined' && typeof exports === 'object') {
+
+		// Node.js
+		module.exports = Tweenkey;
+
+	} else if (root !== undefined) {
+
+		// Global variable
+		root.Tweenkey = Tweenkey;
+
+	}
+
+})(this);
