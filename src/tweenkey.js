@@ -83,19 +83,27 @@ var Tweenkey = Tweenkey || (function() {
 			
 			tween._elapsedTime += dt;
 
-			// update tween props
-			var idx = tween._props.length;
-			while ( idx-- ) {
-				var prop = tween._props[ idx ];
-
-				// default progress for tween.set
-				tween._progress = 1;
-				if ( tween._duration > 0 ) {
-					tween._progress = m.min( 1, tween._elapsedTime / tween._duration );
-				}
-				 
-				target[ prop.name ] = tween._ease( tween._progress, prop.f, prop.t - prop.f, 1 );
+			// default progress for tween.set
+			tween._progress = 1;
+			if ( tween._duration > 0 ) {
+				tween._progress = m.min( 1, tween._elapsedTime / tween._duration );
 			}
+
+			// update tween props
+			var currentTarget = tween._firstTarget;
+
+			do {
+				for (var idx = 0, length = currentTarget.properties.length; idx < length; idx++ ) {
+					var property = currentTarget.properties[ idx ];
+					
+					currentTarget.target[ property.name ] = tween._ease( 
+						tween._progress,
+						property.f,
+						property.t - property.f,
+						1
+					);
+				}
+			} while ( currentTarget = currentTarget.next );
 
 			// fire onUpdate notification
 			tween._onUpdate();
@@ -111,29 +119,51 @@ var Tweenkey = Tweenkey || (function() {
 	}
 
 	/*
-	 * Pushes all the properties to tween into the tween.props array 
+	 * Makes a forward linked list of all objects and properties to iterate
 	 */
-	function addProps( tween, propertiesTo, overrideFrom ) {
+	function initProperties( tween, propertiesTo, overrideFrom ) {
 		
-		// If is a FromTo tween override fromParams
-		var fromParams = overrideFrom || tween._target;
+		var targets =  _globals.isArray( tween._target ) ? tween._target : [ tween._target ];
+		var prevTarget, firstTarget;
+		
+		for ( var idx = 0, length = targets.length; idx < length; idx++ ) {
+			var current = targets[ idx ];
+			
+			// If is a FromTo tween override fromParams
+			var fromParams = overrideFrom || current;
+			var properties = [];
 
-		for ( var p in propertiesTo ) {
+			for ( var key in propertiesTo ) {
+				
+				// Tweeneable param names can only be numbers and not tween property names
+				// also we check that current property exists on target object
+				if ( ! tween[ key ] && _globals.isNumber( propertiesTo[ key ] ) && ( key in current ) ) {
+					
+					var property = 	{
+						name: key,
+						'f': fromParams[ key ],
+						't': propertiesTo[ key ]
+					};
 
-			// Tweeneable param names can only be numbers and not reserved properties
-			if ( !tween[ p ] && _globals.isNumber( propertiesTo[ p ] ) ) {
-				var prop = {
-					name: p,
-					'f': fromParams[ p ],
-					't': propertiesTo[ p ]
-				};
-
-				// swap from and to values if is tween from
-				if (tween._type == TWEEN_FROM || tween._type == TWEEN_FROM_TO)
-					prop.t = [ prop.f, prop.f = prop.t ][ 0 ];
-				tween._props.push( prop );
+					// swap from and to values if is tween from
+					if (tween._type == TWEEN_FROM || tween._type == TWEEN_FROM_TO)
+						property.t = [ property.f, property.f = property.t ][ 0 ];
+					
+					properties.push( property );
+				}
 			}
+
+			var linkedTarget = {
+				target: current,
+				properties: properties
+			};
+		
+			firstTarget = firstTarget || linkedTarget;
+			prevTarget && ( prevTarget.next = linkedTarget );
+			prevTarget = linkedTarget;
 		}
+
+		tween._firstTarget = firstTarget;
 	}
 
 	function createCallback( cb, tween ) {
@@ -144,7 +174,6 @@ var Tweenkey = Tweenkey || (function() {
 	}
 
 	function initTween( tween, target, params ) {
-		tween._target = target;
 
 		var duration = params.shift();
 		var params1 = params.shift();
@@ -158,7 +187,9 @@ var Tweenkey = Tweenkey || (function() {
 
 		// initialize tween properties
 		var delay = _globals.isNumber( sParams.delay ) ? m.max( 0, sParams.delay ) : 0;
+
 		_globals.extend( tween, {
+			_target: 		target,
 			_progress: 		0,
 			_elapsedTime: 	0,
 			_alive: 		true,
@@ -172,17 +203,18 @@ var Tweenkey = Tweenkey || (function() {
 			_onComplete: 	createCallback( sParams.onComplete, tween )
 		}, true );
 
-		addProps( tween, params1, params2 );
+		initProperties( tween, params1, params2 );
 	}
 
 	Tween.prototype = {
 		define: function( params ) {
 			var target = params.shift();
 
-			// Compare params signature
+			// Validate params
 			var validParams = _globals.signatureEquals( params, this._type.join( ':' ) );
-
-			if ( _globals.isObject( target ) && validParams ) {
+			var validTarget = _globals.isObject( target ) || _globals.isArray( target );
+			
+			if ( validTarget && validParams ) {
 				initTween( this, target, params );
 				tweens.push( this );
 			
