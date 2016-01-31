@@ -4,7 +4,7 @@
   "description": "A modern tweening engine for Javascript.",
   "main": "src/tweenkey.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha-phantomjs tests/test-runner.html"
   },
   "repository": {
     "type": "git",
@@ -21,10 +21,13 @@
   "author": "Iván Juárez Núñez",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/radixzz/Tweenkey/issues"
+    "url": "https://git hub.com/radixzz/Tweenkey/issues"
   },
   "homepage": "https://github.com/radixzz/Tweenkey",
-  "dependencies": {
-    "jscs": "^2.9.0"
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "jscs": "^2.9.0",
+    "mocha": "^2.4.5",
+    "mocha-phantomjs": "^4.0.2"
   }
 }

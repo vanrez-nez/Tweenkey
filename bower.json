@@ -6,8 +6,7 @@
   "main": "dist/tweenkey.min.js",
   "moduleType": [
     "amd",
-    "globals",
-    "node"
+    "globals"
   ],
   "keywords": [
     "Animation",

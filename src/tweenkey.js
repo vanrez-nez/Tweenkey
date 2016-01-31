@@ -1,12 +1,12 @@
 
-var Tweenkey = Tweenkey || (function() {
+var Tweenkey = Tweenkey || (function( wnd ) {
 	"use strict";
 	
 	var rAF, cAF;
 	var tweens = [];
 	var m = Math;
-	var wnd = window;
 	var lastTime = 0;
+	var autoUpdate = false;
 
 	var TYPE_FNC = Object.prototype.toString;
 
@@ -56,11 +56,8 @@ var Tweenkey = Tweenkey || (function() {
 	};
 	
 	function Tween(type) {
-		_globals.extend( this, {
-			_type: type,
-			_props: []
-		} );
-
+		this._type = type;
+		
 		return this;
 	}
 
@@ -121,8 +118,8 @@ var Tweenkey = Tweenkey || (function() {
 	/*
 	 * Makes a forward linked list of all objects and properties to iterate
 	 */
-	function initProperties( tween, propertiesTo, overrideFrom ) {
-		
+	function initTargetProperties( tween, propertiesTo, overrideFrom ) {
+
 		var targets =  _globals.isArray( tween._target ) ? tween._target : [ tween._target ];
 		var prevTarget, firstTarget;
 		
@@ -146,7 +143,7 @@ var Tweenkey = Tweenkey || (function() {
 					};
 
 					// swap from and to values if is tween from
-					if (tween._type == TWEEN_FROM || tween._type == TWEEN_FROM_TO)
+					if ( tween._type == TWEEN_FROM || tween._type == TWEEN_FROM_TO )
 						property.t = [ property.f, property.f = property.t ][ 0 ];
 					
 					properties.push( property );
@@ -203,7 +200,7 @@ var Tweenkey = Tweenkey || (function() {
 			_onComplete: 	createCallback( sParams.onComplete, tween )
 		}, true );
 
-		initProperties( tween, params1, params2 );
+		initTargetProperties( tween, params1, params2 );
 	}
 
 	Tween.prototype = {
@@ -266,6 +263,10 @@ var Tweenkey = Tweenkey || (function() {
 
 	}
 
+	function update( time ) {
+		autoUpdate && enterFrame( time || _globals.now() );
+	}
+
 	function newTweenFactory() {
 
 		var args = [].slice.call( arguments );
@@ -278,13 +279,9 @@ var Tweenkey = Tweenkey || (function() {
 		};
 	}
 
-	function cancel() {
-		cAF();
-	}
-
 	// borrowed from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
 	(function shimAnimationFrame() {
-		var vendors, a, b, c, i, now, dt, then;
+		var vendors, a, b, c, i, now, dt, then, id;
 
 		vendors = [ 'ms', 'moz', 'webkit', 'o' ];
 		a = 'AnimationFrame';
@@ -318,6 +315,7 @@ var Tweenkey = Tweenkey || (function() {
 	rAF( enterFrame );
 
     return {
+    	update: update,
     	set: newTweenFactory( TWEEN_SET ),
     	to: newTweenFactory( TWEEN_TO ),
     	from: newTweenFactory( TWEEN_FROM ),
@@ -326,9 +324,8 @@ var Tweenkey = Tweenkey || (function() {
     	pauseAll: executeOnAllTweens( 'pause' ),
     	resumeAll: executeOnAllTweens( 'resume' )
     };
-})();
+})( window );
 
-// UMD
 ( function ( root ) {
 
 	if ( typeof define === 'function' && define.amd ) {
@@ -337,12 +334,6 @@ var Tweenkey = Tweenkey || (function() {
 		define( [], function () {
 			return Tweenkey;
 		} );
-
-	} else if ( typeof module !== 'undefined' && typeof exports === 'object' ) {
-
-		// Node.js
-		module.exports = Tweenkey;
-
 	} else if ( root !== undefined ) {
 
 		// Global variable
