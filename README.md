@@ -10,6 +10,7 @@ Micro animation library for javascript.
 - [x] Pause tween engine when browser tab becomes inactive.
 - [x] Handle array of objects as the target param.
 - [x] Setup test environment.
+- [x] Step manually the time with update method.
 - [ ] Handle multiple active tweens into the same object.
 - [ ] Support for killing specific attributes only.
 - [ ] Support to force the end state of the tween when killing.
