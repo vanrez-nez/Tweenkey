@@ -5,8 +5,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 	var rAF, cAF;
 	var tweens = [];
 	var m = Math;
+
 	var lastTime = 0;
-	var autoUpdate = false;
+	var autoUpdate = true;
 
 	var TYPE_FNC = Object.prototype.toString;
 
@@ -89,7 +90,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
 			// update tween props
 			var currentTarget = tween._firstTarget;
-
+			
 			do {
 				for (var idx = 0, length = currentTarget.properties.length; idx < length; idx++ ) {
 					var property = currentTarget.properties[ idx ];
@@ -186,8 +187,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 		// initialize tween properties
 		var delay = _globals.isNumber( sParams.delay ) ? m.max( 0, sParams.delay ) : 0;
 
+		tween._target = target;
+		
 		_globals.extend( tween, {
-			_target: 		target,
 			_progress: 		0,
 			_elapsedTime: 	0,
 			_alive: 		true,
@@ -248,6 +250,13 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 		}
 	}
 
+	function setAutoUpdate( enabled ) {
+		autoUpdate = Boolean( enabled );
+		if ( enabled ) {
+			enterFrame( 0 );
+		}
+	}
+
 	function enterFrame( timeStamp ) {
 
 		var dt = m.min( ( timeStamp - lastTime ) / 1000, 0.016 );
@@ -261,12 +270,12 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 		for ( var idx = 0, length = tweens.length; idx < length; idx++ )
 			tweens[ idx ]._active && updateTween( tweens[ idx ], dt );
 
-		rAF( enterFrame );	
-
+		autoUpdate && rAF( enterFrame );
 	}
 
-	function update( time ) {
-		autoUpdate && enterFrame( time || _globals.now() );
+	function update( step ) {
+		step = Number(step || 1);
+		autoUpdate == false && enterFrame( lastTime + step );
 	}
 
 	function newTweenFactory( type ) {
@@ -278,7 +287,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
 	// borrowed from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
 	(function shimAnimationFrame() {
-		var vendors, a, b, c, i, now, dt, then, id;
+		var vendors, a, b, c, i, now, dt, id;
+		var then = 0;
 
 		vendors = [ 'ms', 'moz', 'webkit', 'o' ];
 		a = 'AnimationFrame';
@@ -309,17 +319,18 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 		};
 	})();
 
-	rAF( enterFrame );
+	enterFrame( 0 );
 
-    return {
-    	update: update,
-    	set: newTweenFactory( TWEEN_SET ),
-    	to: newTweenFactory( TWEEN_TO ),
-    	from: newTweenFactory( TWEEN_FROM ),
-    	fromTo: newTweenFactory( TWEEN_FROM_TO ),
-    	killAll: executeOnAllTweens( 'kill' ),
-    	pauseAll: executeOnAllTweens( 'pause' ),
-    	resumeAll: executeOnAllTweens( 'resume' )
+	return {
+		update: update,
+		autoUpdate: setAutoUpdate,
+		set: newTweenFactory( TWEEN_SET ),
+		to: newTweenFactory( TWEEN_TO ),
+		from: newTweenFactory( TWEEN_FROM ),
+		fromTo: newTweenFactory( TWEEN_FROM_TO ),
+		killAll: executeOnAllTweens( 'kill' ),
+		pauseAll: executeOnAllTweens( 'pause' ),
+		resumeAll: executeOnAllTweens( 'resume' )
     };
 })( window );
 
