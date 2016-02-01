@@ -55,7 +55,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 		}
 	};
 	
-	function Tween(type) {
+	function Tween( type ) {
+
 		this._type = type;
 		
 		return this;
@@ -210,15 +211,16 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 			// Validate params
 			var validParams = _globals.signatureEquals( params, this._type.join( ':' ) );
 			var validTarget = _globals.isObject( target ) || _globals.isArray( target );
-			
-			if ( validTarget && validParams ) {
+
+			if ( validParams && validTarget ) {
 				initTween( this, target, params );
 				tweens.push( this );
+				return this;
 			
 			} else {
 				console.warn( 'Invalid tween parameters:', params );
+				return undefined;
 			}
-			return this;
 		},
 		delay: function( seconds ) {
 			this._delayLeft = this._delay = seconds;
@@ -267,14 +269,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 		autoUpdate && enterFrame( time || _globals.now() );
 	}
 
-	function newTweenFactory() {
-
-		var args = [].slice.call( arguments );
-		args.unshift( null );
-		var factoryFn = Tween.bind.apply( Tween, args);
-		
+	function newTweenFactory( type ) {
 		return function create() {
-			var tween = new factoryFn();
+			var tween = new Tween( type );
 			return tween.define.call( tween, [].slice.call( arguments ) );
 		};
 	}
