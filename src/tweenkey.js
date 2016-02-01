@@ -257,9 +257,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 		}
 	}
 
-	function enterFrame( timeStamp ) {
+	function enterFrame( timeStamp, manualStep ) {
 
-		var dt = m.min( ( timeStamp - lastTime ) / 1000, 0.016 );
+		var dt = manualStep || m.min( ( timeStamp - lastTime ) / 1000, 0.016 );
 		lastTime = timeStamp;
 
 		// clear killed tweens
@@ -274,8 +274,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 	}
 
 	function update( step ) {
-		step = Number(step || 1);
-		autoUpdate == false && enterFrame( lastTime + step );
+		step = Number(step || 0.016);
+		if (step < 0) step = 0;
+		autoUpdate == false && enterFrame( 0, step );
 	}
 
 	function newTweenFactory( type ) {
