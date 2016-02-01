@@ -12,15 +12,17 @@ function disableConsole( disabled ) {
 }
 
 var tweenConstructors 	= [ 'set', 'from', 'to', 'fromTo' ];
-var tweenkeyMethods 	= [ 'update', 'pauseAll', 'killAll', 'resumeAll' ];
+var tweenkeyMethods 	= [ 'autoUpdate', 'update', 'pauseAll', 'killAll', 'resumeAll', ];
 var tweenMethods 		= [ 'pause', 'resume', 'kill', 'delay' ];
 
-var validParams = {
+var basicParams = {
 	set: 	[ { x: 0 }, { x: 1 } ],
-	to: 	[ { x: 0 }, 0.01, { x: 1 } ],
-	from: 	[ { x: 1 }, 0.01, { x: 1} ],
-	fromTo: [ { x: 0 }, 0.01, { x: 1 }, { x: 2 } ]
+	to: 	[ { x: 0 }, 1, { x: 1 } ],
+	from: 	[ { x: 1 }, 1, { x: 1} ],
+	fromTo: [ { x: 0 }, 1, { x: 1 }, { x: 2 } ]
 }
+
+Tweenkey.autoUpdate( false );
 
 describe( 'tweenkey', function() {
 
@@ -42,6 +44,7 @@ describe( 'tweenkey', function() {
 				expect( Tweenkey ).to.respondTo( name );
 			} );
 		} );
+
 	} );
 	
 	describe( 'Tween constructors', function() {
@@ -66,27 +69,138 @@ describe( 'tweenkey', function() {
 
 
 		it( 'Should validate additional params', function() {
+
 			disableConsole( true );
-			
+
 			tweenConstructors.forEach(function( name ) {
 				[ [], null, true, function() {}, undefined ].forEach( function( val ) {
 					expect( Tweenkey[ name ]( val ) ).to.be.undefined;
 				} );
 			} );
+			Tweenkey.killAll();
 
 			disableConsole( false );
 		} );
+
 	} );
 
 	describe( 'Tween definitions', function() {
 		it( 'Should respond to [pause, resume, kill, delay] methods', function() {
 			
 			tweenConstructors.forEach( function( cName ) {
-				var t = Tweenkey[ cName ].apply( null, validParams[ cName ] );
+				var t = Tweenkey[ cName ].apply( null, basicParams[ cName ] );
 				tweenMethods.forEach( function( mName ) {
 					expect( t ).to.respondTo( mName );
 				} );
 			} );
+
 		} );
+	} );
+
+	//chaining
+
+	describe( 'Tween callbacks', function() {
+
+		var invalidCallbacks = [true, false, 1, 0, [], {}, undefined];
+
+		it( 'set: should work with the wrong callback parameters', function() {
+			invalidCallbacks.forEach( function( val ) {
+				
+				var tween = Tweenkey.set( { x: 0 }, {
+					x : 1,
+					onComplete: val,
+					onUpdate: val,
+					onStart: val
+				} );
+
+				Tweenkey.update( 1 );
+				expect( tween ).to.respondTo( '_onComplete' );
+				expect( tween ).to.respondTo( '_onStart' );
+				expect( tween ).to.respondTo( '_onUpdate' );
+				expect( tween._target ).to.have.property( 'x' ).and.equal( 1 );
+			} );
+		} );
+
+		it( 'set: execute the [onComplete, onUpdate] callbacks when all properties are setted', function( done ) {
+			var obj = { x: 0 };
+			Tweenkey.set( obj, { x: 1, 
+				onUpdate: function( target ) {
+					expect( obj ).to.have.property( 'x' ).and.equal( 1 );
+				},
+				onComplete: function( target ) {
+					expect( obj ).to.have.property( 'x' ).and.equal( 1 );
+					done();
+				}
+			} );
+			Tweenkey.update();
+		} );
+
+		it( 'set: execute the onStart callback with all properties untouched', function( done ) {
+			var obj = { x: 0 };
+			Tweenkey.set( obj, { x: 1, 
+				onStart: function( target ) {
+					expect( obj ).to.have.property( 'x' ).and.equal( 0 );
+					done();
+				}
+			} );
+			Tweenkey.update();
+		} );
+
+		it( 'to: should work with the wrong callback parameters', function() {
+			invalidCallbacks.forEach( function( val ) {
+				
+				var tween = Tweenkey.to( { x: 0 }, 1, {
+					x : 1,
+					onComplete: val,
+					onUpdate: val,
+					onStart: val
+				} );
+				Tweenkey.update( 1 );
+
+				expect( tween ).to.respondTo( '_onComplete' );
+				expect( tween ).to.respondTo( '_onStart' );
+				expect( tween ).to.respondTo( '_onUpdate' );
+				expect( tween._target ).to.have.property( 'x' ).and.equal( 1 );
+			} );
+		} );
+
+		it( 'from: should work with the wrong callback parameters', function() {
+			invalidCallbacks.forEach( function( val ) {
+				
+				var tween = Tweenkey.from( { x: 0 }, 1, {
+					x : 1,
+					onComplete: val,
+					onUpdate: val,
+					onStart: val
+				} );
+				Tweenkey.update( 1 );
+
+				expect( tween ).to.respondTo( '_onComplete' );
+				expect( tween ).to.respondTo( '_onStart' );
+				expect( tween ).to.respondTo( '_onUpdate' );
+				expect( tween._target ).to.have.property( 'x' ).and.equal( 0 );
+			} );
+		} );
+
+		it( 'fromTo: should work with the wrong callback parameters', function() {
+			invalidCallbacks.forEach( function( val ) {
+				
+				var tween = Tweenkey.fromTo( { x: 0 }, 1, {
+					x: 1 
+				}, {
+					x : 2,
+					onComplete: val,
+					onUpdate: val,
+					onStart: val
+				} );
+				Tweenkey.update( 1 );
+
+				expect( tween ).to.respondTo( '_onComplete' );
+				expect( tween ).to.respondTo( '_onStart' );
+				expect( tween ).to.respondTo( '_onUpdate' );
+				expect( tween._target ).to.have.property( 'x' ).and.equal( 2 );
+			} );
+		} );
+		
 	} );
 } );
