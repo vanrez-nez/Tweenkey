@@ -11,7 +11,7 @@ Micro animation library for javascript.
 - [x] Handle array of objects as the target param.
 - [x] Setup test environment.
 - [x] Step manually the time with update method.
-- [ ] Handle multiple active tweens into the same object.
+- [x] Handle multiple active tweens into the same object overriding active properties.
 - [ ] Support for killing specific attributes only.
 - [ ] Support to force the end state of the tween when killing.
 - [ ] Add support for immediate render param on set, from and fromTo tweens.

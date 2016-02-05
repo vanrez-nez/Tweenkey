@@ -4,6 +4,12 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 	
 	var rAF, cAF;
 	var tweens = [];
+
+	// flat dictionary to track all objects properties
+	// ids are formed from objectId + propertyName
+	var propDict = {};
+	var propDictIdx = 1;
+
 	var m = Math;
 
 	var lastTime = 0;
@@ -55,6 +61,33 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 			return sig == signature;
 		}
 	};
+
+	function createCallback( cb, tween ) {
+		var valid = _globals.isFunction( cb );
+		return function() {
+			valid && cb.call( tween, tween._target );
+		}
+	}
+
+	function disableRunningProperties( tween ) {
+
+		var currentNode = tween._firstNode;
+		do {
+
+			for ( var idx = currentNode.properties.length; idx--; ) {
+				var property = currentNode.properties[ idx ];
+				var propertyId = currentNode.target.tweenkey_id + property.name;
+
+				if ( propDict[ propertyId ] ) {
+					propDict[ propertyId ].enabled = false;
+				}
+
+				property.enabled = true;
+				propDict[ propertyId ] = property;
+			}
+
+		} while ( currentNode = currentNode.next );
+	}
 	
 	function Tween( type ) {
 
@@ -64,7 +97,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 	}
 
 	/*
-	* Returns whether the tween should be keeped alive or not
+	* Updates the properties of a given tween
 	*/
 	function updateTween( tween, dt ) {
 		
@@ -76,8 +109,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
 			if ( tween._elapsedTime == 0 ) {
 				
+				initTargetProperties( tween,  tween._params[0], tween._params[1] );
+				disableRunningProperties( tween );
 				// fire onStart notification
-				tween._onStart()
+				tween._onStart();
 			}
 			
 			tween._elapsedTime += dt;
@@ -89,28 +124,33 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 			}
 
 			// update tween props
-			var currentTarget = tween._firstTarget;
-			
+			var currentNode = tween._firstNode;
+			var updated = false;
 			do {
-				for (var idx = 0, length = currentTarget.properties.length; idx < length; idx++ ) {
-					var property = currentTarget.properties[ idx ];
-					
-					currentTarget.target[ property.name ] = tween._ease( 
-						tween._progress,
-						property.f,
-						property.t - property.f,
-						1
-					);
-				}
-			} while ( currentTarget = currentTarget.next );
+				for ( var idx = currentNode.properties.length; idx--; ) {
+					var property = currentNode.properties[ idx ];
 
-			// fire onUpdate notification
-			tween._onUpdate();
+					// property not enabled means it was overrided by another tween
+					if ( property.enabled ) {
+						currentNode.target[ property.name ] = tween._ease( 
+							tween._progress,
+							property.f,
+							property.t - property.f,
+							1
+						);
+						updated = true;
+					}
+				}
+			} while ( currentNode = currentNode.next );
+
+			// fire onUpdate notification only if one or more properties were updated
+			updated && tween._onUpdate();
 		}
 		
 		// kill tween?
 		if ( tween._elapsedTime >= tween._duration ) {
 			tween._alive && tween._onComplete();
+
 			// loop count validation should be in here
 			tween.kill();
 		}
@@ -118,30 +158,32 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 	}
 
 	/*
-	 * Makes a forward linked list of all objects and properties to iterate
+	 * Builds a linked list of all objects and properties to iterate
+	 * It stores the first linked object in the current tween
 	 */
-	function initTargetProperties( tween, propertiesTo, overrideFrom ) {
+	function initTargetProperties( tween, targetProperties, originProperties ) {
 
 		var targets =  _globals.isArray( tween._target ) ? tween._target : [ tween._target ];
-		var prevTarget, firstTarget;
+		var prevNode, firstNode;
 		
-		for ( var idx = 0, length = targets.length; idx < length; idx++ ) {
-			var current = targets[ idx ];
+		for ( var idx = targets.length; idx--; ) {
+			var currentTarget = targets[ idx ];
 			
-			// If is a FromTo tween override fromParams
-			var fromParams = overrideFrom || current;
+			// if originProperties is defined then override start values of the object
+			originProperties = originProperties || currentTarget;
 			var properties = [];
 
-			for ( var key in propertiesTo ) {
+			for ( var key in targetProperties ) {
 				
 				// Tweeneable param names can only be numbers and not tween property names
-				// also we check that current property exists on target object
-				if ( ! tween[ key ] && _globals.isNumber( propertiesTo[ key ] ) && ( key in current ) ) {
+				// also we check that currentTarget property exists on target object
+				if ( ! tween[ key ] && _globals.isNumber( targetProperties[ key ] ) && ( key in currentTarget ) ) {
 					
 					var property = 	{
 						name: key,
-						'f': fromParams[ key ],
-						't': propertiesTo[ key ]
+						enabled: true,
+						'f': originProperties[ key ],
+						't': targetProperties[ key ],
 					};
 
 					// swap from and to values if is tween from
@@ -152,24 +194,20 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 				}
 			}
 
-			var linkedTarget = {
-				target: current,
+			var currentNode = {
+				target: currentTarget,
 				properties: properties
 			};
+
+			// tag object id without overwrite
+			currentTarget.tweenkey_id = currentTarget.tweenkey_id || propDictIdx++;
 		
-			firstTarget = firstTarget || linkedTarget;
-			prevTarget && ( prevTarget.next = linkedTarget );
-			prevTarget = linkedTarget;
+			firstNode = firstNode || currentNode;
+			prevNode && ( prevNode.next = currentNode );
+			prevNode = currentNode;
 		}
 
-		tween._firstTarget = firstTarget;
-	}
-
-	function createCallback( cb, tween ) {
-		var valid = _globals.isFunction( cb );
-		return function() {
-			valid && cb.call( tween, tween._target );
-		}
+		tween._firstNode = firstNode;
 	}
 
 	function initTween( tween, target, params ) {
@@ -200,10 +238,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 			_delayLeft: 	delay,
 			_onStart: 		createCallback( sParams.onStart, tween ),
 			_onUpdate: 		createCallback( sParams.onUpdate, tween ),
-			_onComplete: 	createCallback( sParams.onComplete, tween )
+			_onComplete: 	createCallback( sParams.onComplete, tween ),
+			_params: 		[params1, params2]
 		}, true );
 
-		initTargetProperties( tween, params1, params2 );
 	}
 
 	Tween.prototype = {
