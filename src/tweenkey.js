@@ -75,11 +75,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         };
     }
 
-    /* 
+    /*
     * Disables target properties of a tween.
     * It keeps global properties of dictionary in sync.
     * Keys param specifies which properties to disable.
-    */ 
+    */
     function disablePropertiesIn( tween, keys ) {
 
         var unfiltered = _g.isObject( keys ) == false;
@@ -109,8 +109,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         var currentNode = tween._firstNode;
         do {
             for ( var idx = currentNode.properties.length; idx--; ) {
-                currentNode.properties[ idx ].update();
-            }            
+                currentNode.properties[ idx ].refresh();
+            }
         } while ( currentNode = currentNode.next );
     }
 
@@ -123,11 +123,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     Property.prototype = {
-        update: function() {
+        refresh: function() {
             this.start = this.originProperties[ this.name ];
             this.end = this.targetProperties[ this.name ];
         }
-    }
+    };
 
     function Tween( type ) {
 
@@ -165,7 +165,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             // Update tween properties
             var currentNode = tween._firstNode;
             var updatedTargets = 0;
-            
+
             do {
                 var updated = false;
                 for ( var idx = currentNode.properties.length; idx--; ) {
@@ -180,7 +180,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
                         updated = true;
                     } else {
-                        
                         // We remove the property entirely to avoid performance
                         // issues due many disabled properties looping.
                         // Restarting the loop will bring back the removed
@@ -202,7 +201,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 // We kill the tween early to avoid further notifications
                 tween.kill();
             }
-            
         }
 
         // Tween finished?
@@ -243,7 +241,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 if ( !tween[ key ] && key in currentTarget &&
                     _g.isNumber( targetProperties[ key ] ) ) {
 
-                    var property = new Property( 
+                    var property = new Property(
                             currentTarget._twkId + key,
                             key,
                             originProperties,
@@ -256,7 +254,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                         property.originProperties = targetProperties;
                     }
 
-                    property.update();
+                    property.refresh();
                     properties.push( property );
                 }
             }
@@ -321,7 +319,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
         define: function( params ) {
             var target = params.shift();
-
             var validParams = _g.signatureEquals( params, this._type.join( ':' ) );
             var validTarget = _g.isObject( target ) || _g.isArray( target );
 
@@ -403,9 +400,16 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     function newTweenFactory( type ) {
-        return function create() {
+        return function() {
             var tween = new Tween( type );
-            return tween.define.call( tween, [].slice.call( arguments ) );
+
+            // V8 optimization killer
+            // fix https://github.com/petkaantonov/bluebird/wiki/Optimization-killers
+            var args = new Array(arguments.length);
+             for(var i = 0; i < args.length; ++i) {
+                args[i] = arguments[i];
+             }
+            return tween.define( args );
         };
     }
 
