@@ -76,46 +76,63 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     /* 
-    * Set target properties to be enabled/disabled.
-    * It keeps global properties dictionary in sync.
-    * Optionally specifying which property keys to touch,
-    * if no keys param is provided all properties will be affected
+    * Disables target properties of a tween.
+    * It keeps global properties of dictionary in sync.
+    * Keys param specifies which properties to disable.
     */ 
-    function setPropertiesEnabledIn( properties, enable, keys ) {
+    function disablePropertiesIn( tween, keys ) {
 
-        var allKeys = _g.isObject( keys ) == false;
+        var unfiltered = _g.isObject( keys ) == false;
+        var currentNode = tween._firstNode;
 
-        for ( var idx = properties.length; idx--; ) {
+        do {
+            for ( var idx = currentNode.properties.length; idx--; ) {
 
-            var property = properties[ idx ];
+                var property = currentNode.properties[ idx ];
 
-            if (  allKeys || keys[ property.name ] === true ) {
-
+                // If there is a running property disable it
+                // and remove it from dictionary
                 if ( propDict[ property.id ] ) {
                     propDict[ property.id ].enabled = false;
                     delete propDict[ property.id ];
                 }
 
-                if ( enable ) {
+                if (  unfiltered || keys[ property.name ] === true ) {
                     property.enabled = true;
                     propDict[ property.id ] = property;
                 }
-
             }
-        }
+        } while ( currentNode = currentNode.next );
     }
 
-    function setTargetsPropertiesEnabledIn( tween, enable, keys ) {
+    function refreshPropertiesIn( tween ) {
         var currentNode = tween._firstNode;
         do {
-            setPropertiesEnabledIn( currentNode.properties, enable, keys );
+            for ( var idx = currentNode.properties.length; idx--; ) {
+                currentNode.properties[ idx ].update();
+            }            
         } while ( currentNode = currentNode.next );
+    }
+
+    function Property( id, name, originProperties, targetProperties ) {
+        this.id = id;
+        this.name = name;
+        this.originProperties = originProperties;
+        this.targetProperties = targetProperties;
+        this.enabled = true;
+    }
+
+    Property.prototype = {
+        update: function() {
+            this.start = this.originProperties[ this.name ];
+            this.end = this.targetProperties[ this.name ];
+        }
     }
 
     function Tween( type ) {
 
         this._type = type;
-        this._isDefined = false;
+        this._defined = false;
 
         return this;
     }
@@ -132,48 +149,67 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         if ( tween._delayLeft == 0 ) {
 
             if ( tween._elapsedTime == 0 ) {
-
-                initTargetProperties( tween,  tween._params[ 0 ], tween._params[ 1 ] );
-                setTargetsPropertiesEnabledIn( tween, true );
-                // fire onStart notification
+                refreshPropertiesIn( tween );
+                // Fire onStart notification
                 tween._onStart();
             }
 
             tween._elapsedTime += dt;
 
-            // default progress for tween.set
+            // Default progress for tween.set
             tween._progress = 1;
             if ( tween._duration > 0 ) {
                 tween._progress = m.min( 1, tween._elapsedTime / tween._duration );
             }
 
-            // update tween props
+            // Update tween properties
             var currentNode = tween._firstNode;
-            var updated = false;
+            var updatedTargets = 0;
+            
             do {
+                var updated = false;
                 for ( var idx = currentNode.properties.length; idx--; ) {
                     var property = currentNode.properties[ idx ];
-
-                    // property not enabled means it was overrided by another tween
                     if ( property.enabled ) {
                         currentNode.target[ property.name ] = tween._ease(
                             tween._progress,
-                            property.f,
-                            property.t - property.f,
+                            property.start,
+                            property.end - property.start,
                             1
                         );
+
                         updated = true;
+                    } else {
+                        
+                        // We remove the property entirely to avoid performance
+                        // issues due many disabled properties looping.
+                        // Restarting the loop will bring back the removed
+                        // properties by calling resetTargetProperties()
+                        currentNode.properties.splice( idx, 1 );
                     }
                 }
+
+                updatedTargets += updated | 0;
+
             } while ( currentNode = currentNode.next );
 
-            // fire onUpdate notification only if one or more properties were updated
-            updated && tween._onUpdate();
+            // Fire onUpdate notification only if one or more properties were updated
+            if ( updatedTargets > 0 ) {
+                tween._onUpdate();
+            } else {
+
+                // No updated targets means all properties where overrided
+                // We kill the tween early to avoid further notifications
+                tween.kill();
+            }
+            
         }
 
-        // kill tween?
+        // Tween finished?
         if ( tween._elapsedTime >= tween._duration ) {
-            tween._alive && tween._onComplete();
+            if ( tween._alive ) {
+                tween._onComplete();
+            }
 
             // loop count validation should be in here
             tween.kill();
@@ -185,7 +221,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
      * Builds a linked list of all objects and properties to iterate
      * It stores the first linked object in the current tween
      */
-    function initTargetProperties( tween, targetProperties, originProperties ) {
+    function resetTargetProperties( tween, targetProperties, originProperties ) {
 
         var targets =  _g.isArray( tween._target ) ? tween._target : [ tween._target ];
         var prevNode, firstNode;
@@ -193,10 +229,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         for ( var idx = targets.length; idx--; ) {
             var currentTarget = targets[ idx ];
 
-            // tag object id without overwrite
+            // Tag object id without overwrite
             currentTarget._twkId = currentTarget._twkId || propDictIdx++;
 
-            // if originProperties is defined then override start values of the object
+            // If originProperties is defined then override start values of the object
             originProperties = originProperties || currentTarget;
             var properties = [];
 
@@ -207,19 +243,20 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 if ( !tween[ key ] && key in currentTarget &&
                     _g.isNumber( targetProperties[ key ] ) ) {
 
-                    var property = {
-                        id          : currentTarget._twkId + key,
-                        name        : key,
-                        enabled     : false,
-                        'f'         : originProperties[ key ],
-                        't'         : targetProperties[ key ]
-                    };
+                    var property = new Property( 
+                            currentTarget._twkId + key,
+                            key,
+                            originProperties,
+                            targetProperties
+                        );
 
-                    // swap from and to values if is tween from
+                    // Swap from and to values if is tween from
                     if ( tween._type == TWEEN_FROM || tween._type == TWEEN_FROM_TO ) {
-                        property.t = [ property.f, property.f = property.t ][ 0 ];
+                        property.targetProperties = originProperties;
+                        property.originProperties = targetProperties;
                     }
 
+                    property.update();
                     properties.push( property );
                 }
             }
@@ -230,7 +267,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             };
 
             firstNode = firstNode || currentNode;
-            prevNode && ( prevNode.next = currentNode );
+
+            if ( prevNode ) {
+               prevNode.next = currentNode;
+            }
+
             prevNode = currentNode;
         }
 
@@ -243,24 +284,27 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         var params1 = params.shift();
         var params2 = params.shift();
 
-        // swap duration to params1 if no duration was defined (Tween.set)
-        _g.isObject( duration ) && ( params1 = duration ) && ( duration = 0 );
+        // Swap duration to params1 if no duration was defined (Tween.set)
+        if ( _g.isObject( duration ) ) {
+            params1 = duration;
+            duration = 0;
+        }
 
-        // select special params
+        // Select special params
         var sParams = params2 || params1;
 
-        // initialize tween properties
+        // Initialize tween properties
         var delay = _g.isNumber( sParams.delay ) ? m.max( 0, sParams.delay ) : 0;
 
         tween._target = target;
 
         _g.extend( tween, {
-            _isDefined      : true,
+            _defined      : true,
             _progress       : 0,
             _elapsedTime    : 0,
             _alive          : true,
             _duration       : _g.isNumber( duration ) ? m.max( 0, duration ) : 0,
-            _active         : _g.isBoolean( sParams.autoStart ) ? sParams.autoStart : true,
+            _running        : _g.isBoolean( sParams.autoStart ) ? sParams.autoStart : true,
             _ease           : _g.isFunction( sParams.ease ) ? sParams.ease : _g.lerp,
             _delay          : delay,
             _delayLeft      : delay,
@@ -270,6 +314,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             _params         : [ params1, params2 ]
         }, true );
 
+        resetTargetProperties( tween, params1, params2 );
     }
 
     Tween.prototype = {
@@ -277,7 +322,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         define: function( params ) {
             var target = params.shift();
 
-            // Validate params
             var validParams = _g.signatureEquals( params, this._type.join( ':' ) );
             var validTarget = _g.isObject( target ) || _g.isArray( target );
 
@@ -298,19 +342,21 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         },
 
         kill: function( properties ) {
-            setTargetsPropertiesEnabledIn( this, false, properties );
-            this._active = false;
-            this._alive = false;
+            if ( _g.isObject( properties ) ) {
+                disablePropertiesIn( this, properties );
+            } else {
+                this._alive = false;
+            }
             return this;
         },
 
         pause: function() {
-            this._active = false;
+            this._running = false;
             return this;
         },
 
         resume: function() {
-            this._active = true;
+            this._running = true;
             return this;
         }
     };
@@ -342,7 +388,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
         // update tweens (order matters)
         for ( var idx = 0, length = tweens.length; idx < length; idx++ ) {
-            tweens[ idx ]._active && updateTween( tweens[ idx ], dt );
+            tweens[ idx ]._running && updateTween( tweens[ idx ], dt );
         }
 
         autoUpdate && rAF( enterFrame );
@@ -350,7 +396,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     function update( step ) {
         step = Number( step || 0.016 );
-        step < 0 && ( step = 0 );
+        if ( step < 0 ) {
+            step = 0;
+        }
         autoUpdate == false && enterFrame( 0, step );
     }
 
