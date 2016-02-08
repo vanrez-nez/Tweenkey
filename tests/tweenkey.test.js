@@ -46,7 +46,7 @@ describe( 'tweenkey', function() {
 			disableConsole( true );
 			tweenConstructors.forEach(function( name ) {
 				expect( Tweenkey[ name ]() )
-				.to.have.property( '_isDefined' ).and.equal( false );
+				.to.have.property( '_defined' ).and.equal( false );
 			});
 			disableConsole( false );
 		});
@@ -56,7 +56,7 @@ describe( 'tweenkey', function() {
 			tweenConstructors.forEach(function( name ) {
 				[ 1, null, true, function() {}, undefined ].forEach(function( val ) {
 					expect( Tweenkey[ name ]( val ) )
-					.to.have.property( '_isDefined' ).and.equal( false );
+					.to.have.property( '_defined' ).and.equal( false );
 				});
 			});
 			disableConsole( false );
@@ -70,7 +70,7 @@ describe( 'tweenkey', function() {
 			tweenConstructors.forEach(function( name ) {
 				[ [], null, true, function() {}, undefined ].forEach(function( val ) {
 					expect( Tweenkey[ name ]( val ) )
-					.to.have.property( '_isDefined' ).and.equal( false );
+					.to.have.property( '_defined' ).and.equal( false );
 				});
 			});
 			Tweenkey.killAll();
