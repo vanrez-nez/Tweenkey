@@ -403,11 +403,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         return function() {
             var tween = new Tween( type );
 
-            // V8 optimization killer
-            // fix https://github.com/petkaantonov/bluebird/wiki/Optimization-killers
-            var args = new Array(arguments.length);
-             for(var i = 0; i < args.length; ++i) {
-                args[i] = arguments[i];
+            // fix: V8 optimization-killer
+            // https://github.com/petkaantonov/bluebird/wiki/Optimization-killers
+            var args = [];
+             for ( var i = 0; i < arguments.length; ++i ) {
+                args[ i ] = arguments[ i ];
              }
             return tween.define( args );
         };
