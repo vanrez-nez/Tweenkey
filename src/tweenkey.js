@@ -21,6 +21,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     var autoUpdate = true;
 
     var TYPE_FNC = Object.prototype.toString;
+    var MAX_FRAME_STEP = 1 / 90;
 
     // Type constants
     var S_FNC   = 'F';
@@ -41,6 +42,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         };
     }
 
+    var _cfg = {
+        autoUpdate: true,
+        fps: 60
+    }
+
     // Global object to be shared between modules
     var _g = {
         isFunction      : getTypeCheck( S_FNC ),
@@ -49,7 +55,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         isNumber        : getTypeCheck( S_NUM ),
         isBoolean       : getTypeCheck( S_BOOL ),
         now: function() {
-            return +new Date();
+            return wnd.performance && wnd.performance.now() || +new Date();
         },
         lerp: function( t, b, c, d ) {
             return c * t / d + b;
@@ -367,7 +373,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     function setAutoUpdate( enabled ) {
-        autoUpdate = Boolean( enabled );
+        _cfg.autoUpdate = Boolean( enabled );
         if ( enabled ) {
             enterFrame( 0 );
         }
@@ -375,8 +381,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     function enterFrame( timeStamp, manualStep ) {
 
-        var dt = manualStep || m.min( ( timeStamp - lastTime ) / 1000, 0.016 );
-        lastTime = timeStamp;
+        var dt = manualStep || m.min(( _g.now() - lastTime ) / 1000, MAX_FRAME_STEP);
+        lastTime = _g.now();
 
         // clear killed tweens
         for ( var idx = tweens.length; idx--; ) {
@@ -388,15 +394,15 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             tweens[ idx ]._running && updateTween( tweens[ idx ], dt );
         }
 
-        autoUpdate && rAF( enterFrame );
+        _cfg.autoUpdate && rAF( enterFrame );
     }
 
     function update( step ) {
-        step = Number( step || 0.016 );
+        step = Number( step || 1 / _cfg.fps );
         if ( step < 0 ) {
             step = 0;
         }
-        autoUpdate == false && enterFrame( 0, step );
+        _cfg.autoUpdate == false && enterFrame( 0, step );
     }
 
     function newTweenFactory( type ) {
@@ -446,6 +452,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         };
     })();
 
+    lastTime = _g.now();
     enterFrame( 0 );
 
     return {
