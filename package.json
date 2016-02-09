@@ -5,7 +5,8 @@
   "main": "src/tweenkey.js",
   "scripts": {
     "test": "mocha-phantomjs tests/test-runner.html",
-    "test-style": "jscs src/tweenkey.js"
+    "test-style": "jscs src/tweenkey.js",
+    "build": "uglifyjs src/tweenkey.js -c -m --reserved-file=min.reserved --mangle-props -o dist/tweenkey.min.js"
   },
   "repository": {
     "type": "git",
@@ -29,6 +30,7 @@
     "chai": "^3.5.0",
     "jscs": "^2.9.0",
     "mocha": "^2.4.5",
-    "mocha-phantomjs": "^4.0.2"
+    "mocha-phantomjs": "^4.0.2",
+    "uglify-js": "^2.6.1"
   }
 }

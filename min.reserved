@@ -1,0 +1,25 @@
+{
+  "vars": [ "Tweenkey" ],
+  "props": [
+  	"prototype",
+  	"set",
+  	"to",
+  	"from",
+  	"fromTo",
+  	"killAll",
+  	"pauseAll",
+  	"resumeAll",
+  	"pause",
+  	"resume",
+  	"kill",
+  	"delay",
+  	"update",
+  	"autoUpdate",
+  	"_twkId",
+  	"_target",
+  	"_onComplete",
+  	"_onStart",
+  	"_onUpdate",
+  	"_defined"
+  ]
+}

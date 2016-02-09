@@ -56,11 +56,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         isNumber        : getTypeCheck( S_NUM ),
         isBoolean       : getTypeCheck( S_BOOL ),
         now: function() {
-            if (PERFORMANCE && PERFORMANCE.now) {
-                return PERFORMANCE.now();
-            } else {
-                return +new Date();
-            }
+            return PERFORMANCE && PERFORMANCE.now && PERFORMANCE.now() || +new Date();
         },
         lerp: function( t, b, c, d ) {
             return c * t / d + b;
@@ -93,7 +89,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     */
     function disablePropertiesIn( tween, keys ) {
 
-        var unfiltered = _g.isObject( keys ) == false;
+        var unfiltered = ! _g.isObject( keys );
         var currentNode = tween._firstNode;
 
         do {
@@ -108,7 +104,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                     delete propDict[ property.id ];
                 }
 
-                if (  unfiltered || keys[ property.name ] === true ) {
+                if (  unfiltered || ! keys[ property.name ] ) {
                     property.enabled = true;
                     propDict[ property.id ] = property;
                 }
@@ -152,8 +148,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     * Updates the properties of a given tween
     */
     function tweenTick( tween, dt ) {
-
-        var target = tween._target;
 
         tween._delayLeft = m.max( tween._delayLeft - dt, 0 );
 
@@ -308,7 +302,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         tween._target = target;
 
         _g.extend( tween, {
-            _defined      : true,
+            _defined        : true,
             _progress       : 0,
             _elapsedTime    : 0,
             _alive          : true,
@@ -380,7 +374,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     function setAutoUpdate( enabled ) {
         autoUpdate = Boolean( enabled );
         if ( enabled ) {
-            enterFrame( 0 );
+            onFrame( 0 );
         }
     }
 
@@ -400,11 +394,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     function onFrame( t ) {
 
         var now = _g.now();
-
         var delta = ( now - lastTime ) / 1000 - timeBehind;
-
         timeBehind = m.max( timeBehind - _config.fpsStep, 0 );
-        
+
         if ( delta > _config.fpsStep ) {
             lastTime = now;
             timeBehind = delta % _config.fpsStep;
@@ -419,7 +411,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         if ( step < 0 ) {
             step = 0;
         }
-        autoUpdate == false && updateTweens( step );
+        ! autoUpdate && updateTweens( step );
     }
 
     function newTweenFactory( type ) {
@@ -438,7 +430,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     // borrowed from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
     (function shimAnimationFrame() {
-        var vendors, a, b, c, i, now, dt, id;
+        var vendors, a, b, c, idx, now, dt, id;
         var then = 0;
 
         vendors = [ 'ms', 'moz', 'webkit', 'o' ];
