@@ -397,7 +397,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         }
     }
 
-    function enterFrame( t ) {
+    function onFrame( t ) {
 
         var now = _g.now();
 
@@ -411,7 +411,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             updateTweens( m.min( delta, _config.fpsStep * 2 ) );
         }
 
-        autoUpdate && rAF( enterFrame );
+        autoUpdate && rAF( onFrame );
     }
 
     function manualStep( step ) {
@@ -469,7 +469,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         };
     })();
 
-    enterFrame( 0 );
+    onFrame( 0 );
 
     return {
         set         : newTweenFactory( TWEEN_SET ),
