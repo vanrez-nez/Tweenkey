@@ -18,9 +18,16 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     var m = Math;
 
     var lastTime = 0;
+    var timeBehind = 0;
     var autoUpdate = true;
 
+    var _config = {
+        autoUpdate: true,
+        fpsStep: 1 / 60
+    };
+
     var TYPE_FNC = Object.prototype.toString;
+    var PERFORMANCE = wnd.performance;
 
     // Type constants
     var S_FNC   = 'F';
@@ -49,7 +56,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         isNumber        : getTypeCheck( S_NUM ),
         isBoolean       : getTypeCheck( S_BOOL ),
         now: function() {
-            return +new Date();
+            if (PERFORMANCE && PERFORMANCE.now) {
+                return PERFORMANCE.now();
+            } else {
+                return +new Date();
+            }
         },
         lerp: function( t, b, c, d ) {
             return c * t / d + b;
@@ -140,7 +151,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     /*
     * Updates the properties of a given tween
     */
-    function updateTween( tween, dt ) {
+    function tweenTick( tween, dt ) {
 
         var target = tween._target;
 
@@ -373,10 +384,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         }
     }
 
-    function enterFrame( timeStamp, manualStep ) {
-
-        var dt = manualStep || m.min( ( timeStamp - lastTime ) / 1000, 0.016 );
-        lastTime = timeStamp;
+    function updateTweens( delta ) {
 
         // clear killed tweens
         for ( var idx = tweens.length; idx--; ) {
@@ -384,19 +392,34 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         }
 
         // update tweens (order matters)
-        for ( var idx = 0, length = tweens.length; idx < length; idx++ ) {
-            tweens[ idx ]._running && updateTween( tweens[ idx ], dt );
+        for ( var idx = 0, length = tweens.length; idx < length; idx++  ) {
+            tweens[ idx ]._running && tweenTick( tweens[ idx ], delta );
+        }
+    }
+
+    function enterFrame( t ) {
+
+        var now = _g.now();
+
+        var delta = ( now - lastTime ) / 1000 - timeBehind;
+
+        timeBehind = m.max( timeBehind - _config.fpsStep, 0 );
+        
+        if ( delta > _config.fpsStep ) {
+            lastTime = now;
+            timeBehind = delta % _config.fpsStep;
+            updateTweens( m.min( delta, _config.fpsStep * 2 ) );
         }
 
         autoUpdate && rAF( enterFrame );
     }
 
-    function update( step ) {
-        step = Number( step || 0.016 );
+    function manualStep( step ) {
+        step = Number( step || _config.fpsStep );
         if ( step < 0 ) {
             step = 0;
         }
-        autoUpdate == false && enterFrame( 0, step );
+        autoUpdate == false && updateTweens( step );
     }
 
     function newTweenFactory( type ) {
@@ -456,7 +479,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         killAll     : executeOnAllTweens( 'kill' ),
         pauseAll    : executeOnAllTweens( 'pause' ),
         resumeAll   : executeOnAllTweens( 'resume' ),
-        update      : update,
+        update      : manualStep,
         autoUpdate  : setAutoUpdate
   };
 })( window );
