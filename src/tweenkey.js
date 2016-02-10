@@ -83,13 +83,13 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     /*
-    * Disables target properties of a tween.
-    * It keeps global properties of dictionary in sync.
-    * Keys param specifies which properties to disable.
-    */
-    function disablePropertiesIn( tween, keys ) {
+     * Disables only <enabled> properties of a tween and removes them from dictionary.
+     * Keys param specifies an array containing which properties to disable, by default
+     * if no keys param is provided all enabled properties will be disabled.
+     */
+    function disableProperties( tween, keys ) {
 
-        var unfiltered = ! _g.isObject( keys );
+        var all = ! _g.isArray( keys );
         var currentNode = tween._firstNode;
 
         do {
@@ -97,22 +97,44 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
                 var property = currentNode.properties[ idx ];
 
-                // If there is a running property disable it
-                // and remove it from dictionary
-                if ( propDict[ property.id ] ) {
-                    propDict[ property.id ].enabled = false;
+                if ( property.enabled && ( all || keys.indexOf(property.name) > -1 ) ) {
+                    property.enabled = false;
                     delete propDict[ property.id ];
                 }
 
-                if (  unfiltered || ! keys[ property.name ] ) {
-                    property.enabled = true;
+            }
+        } while ( currentNode = currentNode.next );
+    }
+
+    /*
+     * Reassigns all <enabled> properties from tween targets into the dictionary,
+     * if a property exists it will disable it prior deletion
+     */
+    function overrideDictionaryProperties( tween ) {
+        var currentNode = tween._firstNode;
+
+        do {
+            for ( var idx = currentNode.properties.length; idx--; ) {
+                var property = currentNode.properties[ idx ];
+                if ( property.enabled ) {
+                    
+                    // If there is a running property disable it
+                    // and remove it from dictionary
+                    if ( propDict[ property.id ] ) {
+                        propDict[ property.id ].enabled = false;
+                        delete propDict[ property.id ];
+                    }
+
                     propDict[ property.id ] = property;
                 }
             }
         } while ( currentNode = currentNode.next );
     }
 
-    function refreshPropertiesIn( tween ) {
+    /*
+     * Sync values between object properties and target properties
+     */
+    function syncTargetProperties( tween ) {
         var currentNode = tween._firstNode;
         do {
             for ( var idx = currentNode.properties.length; idx--; ) {
@@ -154,7 +176,13 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         if ( tween._delayLeft == 0 ) {
 
             if ( tween._elapsedTime == 0 ) {
-                refreshPropertiesIn( tween );
+                
+                // Update current properties from targets
+                syncTargetProperties( tween );
+
+                // Kill all previous active properties in tween
+                overrideDictionaryProperties( tween );
+                
                 // Fire onStart notification
                 tween._onStart();
             }
@@ -242,8 +270,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             for ( var key in targetProperties ) {
 
                 // Tweeneable param names can only be numbers and not tween property names
-                // also we check that currentTarget property exists on target object
-                if ( !tween[ key ] && key in currentTarget &&
+                // also we check that the property exists on target
+                if ( !tween.hasOwnProperty( key ) && key in currentTarget &&
                     _g.isNumber( targetProperties[ key ] ) ) {
 
                     var property = new Property(
@@ -343,11 +371,12 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             return this;
         },
 
-        kill: function( properties ) {
-            if ( _g.isObject( properties ) ) {
-                disablePropertiesIn( this, properties );
+        kill: function() {
+            if ( arguments.length > 0 ) {
+                disableProperties( this, [].slice.call(arguments) );
             } else {
                 this._alive = false;
+                this._running = false;
             }
             return this;
         },
@@ -420,10 +449,12 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
             // fix: V8 optimization-killer
             // https://github.com/petkaantonov/bluebird/wiki/Optimization-killers
+            
             var args = [];
-             for ( var i = 0; i < arguments.length; ++i ) {
+            for ( var i = 0; i < arguments.length; ++i ) {
                 args[ i ] = arguments[ i ];
-             }
+            }
+            
             return tween.define( args );
         };
     }
