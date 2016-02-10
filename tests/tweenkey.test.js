@@ -324,4 +324,36 @@ describe( 'tweenkey', function() {
 			}
 		});
 	});
+
+	describe( 'Tween pause, resume and kill', function() {
+		it( 'set: should pause and resume', function() {
+			var obj = { x: 0 };
+
+			var tween = Tweenkey.set( obj, { x:1 }).pause();
+			Tweenkey.update( 1 );
+			expect( obj ).to.have.property( 'x' ).and.equal( 0 );
+			tween.resume();
+			Tweenkey.update();
+			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
+		});
+
+		it( 'set: should kill its properties', function() {
+			var obj = { x: 0 };
+
+			var tween = Tweenkey.set( obj, { x:1 }).kill();
+			Tweenkey.update( 1 );
+			expect( obj ).to.have.property( 'x' ).and.equal( 0 );
+		});
+
+		it( 'set: should kill specific properties', function() {
+			var obj = { x: 0, y: 0 };
+
+			var tween = Tweenkey.set( obj, { x:1, y: 1 }).kill('y');
+			Tweenkey.update( 1 );
+			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
+			expect( obj ).to.have.property( 'y' ).and.equal( 0 );
+		});
+
+
+	});
 });
