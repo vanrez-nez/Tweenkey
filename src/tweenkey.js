@@ -120,7 +120,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                     
                     // If there is a running property disable it
                     // and remove it from dictionary
-                    if ( propDict[ property.id ] ) {
+                    if ( propDict[ property.id ] && propDict[ property.id ] !== property) {
                         propDict[ property.id ].enabled = false;
                         delete propDict[ property.id ];
                     }
@@ -309,6 +309,14 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         tween._firstNode = firstNode;
     }
 
+    function pushTweenToRenderer( tween ) {
+        resetTargetProperties( tween, tween._params[0], tween._params[1] );
+        if ( tween._delay == 0 ) {
+            overrideDictionaryProperties( tween );    
+        }
+        tweens.push( tween );
+    }
+
     function initTween( tween, target, params ) {
 
         var duration = params.shift();
@@ -344,8 +352,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             _onComplete     : createCallback( sParams.onComplete, tween ),
             _params         : [ params1, params2 ]
         }, true );
-
-        resetTargetProperties( tween, params1, params2 );
     }
 
     Tween.prototype = {
@@ -357,7 +363,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
             if ( validParams && validTarget ) {
                 initTween( this, target, params );
-                tweens.push( this );
+                pushTweenToRenderer( this );
 
             } else {
                 console.warn( 'Invalid tween parameters:', params );
