@@ -325,6 +325,58 @@ describe( 'tweenkey', function() {
 		});
 	});
 
+	describe( 'Tween multiple active tweens on single object', function() {
+		
+		it( '[set, to, from, fromTo]: should be able to modify different properties on same object', function() {
+			var obj = { x: 0, y: 0, z: 3, w: 0 };
+
+			Tweenkey.set( obj, { x: 1 });
+			Tweenkey.to( obj, 1, { y: 2 });
+			Tweenkey.from( obj, 1, { z: 0 });
+			Tweenkey.fromTo(obj, 1, { w: 0 }, { w: 4 });
+			Tweenkey.update(1);
+
+			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
+			expect( obj ).to.have.property( 'y' ).and.equal( 2 );
+			expect( obj ).to.have.property( 'z' ).and.equal( 3 );
+			expect( obj ).to.have.property( 'w' ).and.equal( 4 );
+		});
+
+		it( '[set, to, from, fromTo]: should override same properties on same object', function() {
+			var obj = { x: 0, y: 2, z: 0, w: 0 };
+
+			Tweenkey.set( obj, { x: 0.1, y: 0.2, z: 0.3, w: 0.4 });
+			Tweenkey.to( obj, 1, { x: 1 });
+			Tweenkey.from( obj, 1, { y: 0 });
+			Tweenkey.fromTo( obj, 1, { z: 1 }, { z: 3 });
+			Tweenkey.update(1);
+			
+			// w should be untouched
+			expect( obj ).to.have.property( 'w' ).and.equal( 0.4 );
+			// x overrided by to
+			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
+			// y overrided by from
+			expect( obj ).to.have.property( 'y' ).and.equal( 2 );
+			// z overrided by fromTo
+			expect( obj ).to.have.property( 'z' ).and.equal( 3 );
+		});
+
+		it( '[set, to, from, fromTo]: should no override properties on delay', function() {
+			var obj = { x: 0, y: 2, z: 0, w: 0 };
+
+			Tweenkey.set( obj, { x: 0.1, y: 0.2, z: 0.3, w: 0.4 });
+			Tweenkey.to( obj, 1, { x: 1, delay: 1 });
+			Tweenkey.from( obj, 1, { y: 0, delay: 1 });
+			Tweenkey.fromTo( obj, 1, { z: 1 }, { z: 3, delay: 1});
+			Tweenkey.update(0.5);
+
+			// x, y and z should not override set (delay is retaining)
+			chai.assert.closeTo(obj.x, 0.1, 0.0001, 'x should not override');
+			chai.assert.closeTo(obj.y, 0.2, 0.0001, 'y should not override');
+			chai.assert.closeTo(obj.z, 0.3, 0.0001, 'z should not override');
+		});
+	});
+
 	describe( 'Tween pause, resume and kill', function() {
 		it( 'set: should pause and resume', function() {
 			var obj = { x: 0 };
@@ -337,7 +389,7 @@ describe( 'tweenkey', function() {
 			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
 		});
 
-		it( 'set: should kill its properties', function() {
+		it( 'set: should kill all its properties', function() {
 			var obj = { x: 0 };
 
 			var tween = Tweenkey.set( obj, { x:1 }).kill();
@@ -353,7 +405,5 @@ describe( 'tweenkey', function() {
 			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
 			expect( obj ).to.have.property( 'y' ).and.equal( 0 );
 		});
-
-
 	});
 });
