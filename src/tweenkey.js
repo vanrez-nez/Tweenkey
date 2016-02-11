@@ -10,8 +10,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     var rAF, cAF;
     var tweens = [];
 
-    // Flat dictionary to track all objects properties
-    // ids are formed from objectId + propertyName
+    // Flat dictionary to track all objects properties.
+    // Id's are formed from objectId + propertyName
     var propDict = {};
     var propDictIdx = 1;
 
@@ -311,9 +311,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     function pushTweenToRenderer( tween ) {
         resetTargetProperties( tween, tween._params[0], tween._params[1] );
-        if ( tween._delay == 0 ) {
-            overrideDictionaryProperties( tween );    
-        }
         tweens.push( tween );
     }
 
