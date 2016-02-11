@@ -13,8 +13,7 @@ Micro animation library for javascript.
 - [x] Step manually in time with update method.
 - [x] Handle multiple active tweens into the same object overriding active properties.
 - [x] Support for killing specific attributes only.
-- [ ] Support to force the end state of the tween when killing.
-- [ ] Add support to control FPS.
+- [x] Add support to control FPS.
 - [ ] Add timescale property for tween.
 - [ ] Add support to handle restarts on tweens.
 - [ ] Add reverse and yoyo functionality.
