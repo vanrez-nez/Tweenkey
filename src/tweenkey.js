@@ -410,6 +410,12 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         }
     }
 
+    function setFPS( fps ) {
+        if ( _g.isNumber( fps ) && fps > 0 ) {
+            _config.fpsStep = 1 / fps;
+        }
+    }
+
     function updateTweens( delta ) {
 
         // clear killed tweens
@@ -506,7 +512,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         pauseAll    : executeOnAllTweens( 'pause' ),
         resumeAll   : executeOnAllTweens( 'resume' ),
         update      : manualStep,
-        autoUpdate  : setAutoUpdate
+        autoUpdate  : setAutoUpdate,
+        setFPS      : setFPS
   };
 })( window );
 
