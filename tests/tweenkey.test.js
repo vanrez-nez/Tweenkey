@@ -12,7 +12,7 @@ function disableConsole( disabled ) {
 }
 
 var tweenConstructors 	= [ 'set', 'from', 'to', 'fromTo' ];
-var tweenkeyMethods 	= [ 'autoUpdate', 'update', 'pauseAll', 'killAll', 'resumeAll' ];
+var tweenkeyMethods 	= [ 'autoUpdate', 'update', 'pauseAll', 'killAll', 'resumeAll', 'setFPS' ];
 var tweenMethods 		= [ 'pause', 'resume', 'kill', 'delay' ];
 
 Tweenkey.autoUpdate( false );
@@ -78,6 +78,51 @@ describe( 'tweenkey', function() {
 			disableConsole( false );
 		});
 
+	});
+
+	describe( 'Tweenkey methods', function() {
+		it( 'killAll: should remove all active tweens', function() {
+
+		});
+
+		it( 'pauseAll: should remove all active tweens', function() {
+
+		});
+
+		it( 'resumeAll: should remove all active tweens', function() {
+
+		});
+
+		it( 'setFPS: should adjust speed of updating', function(done) {
+
+			var fps = 10;
+			var updateCount = 0;
+
+			Tweenkey.killAll();
+			Tweenkey.setFPS(fps);
+			Tweenkey.autoUpdate(true);
+
+			// In half second should be 5 updates since fps is 10.
+			// This value can be unpredictible with higher granularity
+			// since requestAnimationFrame is not warranted to be on time.
+			// If user needs exact updates he should be using manual updates,
+			// in other words this won't work with physics loops that need 
+			// a precise number of iterations in time.
+			Tweenkey.to({x:0}, 0.5, { x:1, onUpdate: function() {
+					updateCount++;
+				},
+				onComplete: function() {
+					expect(updateCount).to.equal(5);
+
+					//set back to the original FPS
+					Tweenkey.setFPS(60);
+					Tweenkey.autoUpdate(false);
+					done();
+				}
+			});
+
+			
+		});
 	});
 
 	describe( 'Tween definitions', function() {
