@@ -80,16 +80,33 @@ describe( 'tweenkey', function() {
 
 	});
 
-	describe( 'Tweenkey methods', function() {
+	describe( 'Tweenkey accessors', function() {
 		it( 'killAll: should remove all active tweens', function() {
+			var tweens = [];
+
+			for (var i = 10; i--; ) {
+				var obj = {x: 0, y: 0, z: 1, w: 0};
+				tweens.push(Tweenkey.set(obj, { x:1, delay: 1 }) );
+				tweens.push(Tweenkey.set(obj, { x:1 }) );
+				tweens.push(Tweenkey.to(obj, 1, { y:2 }) );
+				tweens.push(Tweenkey.from(obj, 1, { z:3 }) );
+				tweens.push(Tweenkey.from(obj, 1, { z:3, delay: 1 }) );
+				tweens.push(Tweenkey.fromTo(obj, 1, { w:1 }, { w:4 }) );
+			}
+			Tweenkey.killAll();
+			for (var i = tweens.length; i--; ) {
+				expect(tweens[i]).to.have.property('_alive').and.equal(false);
+			}
+			// make sure current dead tweens are unloaded from queue, just
+			// to be sure it doesn't mess with other tests.
+			Tweenkey.update();
+		});
+
+		it( 'pauseAll: should pause all active tweens', function() {
 
 		});
 
-		it( 'pauseAll: should remove all active tweens', function() {
-
-		});
-
-		it( 'resumeAll: should remove all active tweens', function() {
+		it( 'resumeAll: should resume all paused tweens', function() {
 
 		});
 
@@ -120,8 +137,6 @@ describe( 'tweenkey', function() {
 					done();
 				}
 			});
-
-			
 		});
 	});
 
@@ -162,7 +177,7 @@ describe( 'tweenkey', function() {
 					onStart: val
 				});
 
-				Tweenkey.update( 1 );
+				Tweenkey.update();
 				expect( tween ).to.respondTo( '_onComplete' );
 				expect( tween ).to.respondTo( '_onStart' );
 				expect( tween ).to.respondTo( '_onUpdate' );
