@@ -395,10 +395,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         }
     };
 
-    function executeOnAllTweens ( funcName, args ) {
+    function executeOnAllTweens ( funcName ) {
         return function() {
             for ( var idx = tweens.length; idx--; ) {
-                tweens[ idx ][ funcName ]( args );
+                var tween = tweens[ idx ];
+                tween[ funcName ].apply(tween, arguments );
             }
         };
     }
