@@ -353,27 +353,48 @@ describe( 'tweenkey', function() {
 			
 			// w should be untouched
 			expect( obj ).to.have.property( 'w' ).and.equal( 0.4 );
+			
 			// x overrided by to
-			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
-			// y overrided by from
-			expect( obj ).to.have.property( 'y' ).and.equal( 2 );
-			// z overrided by fromTo
-			expect( obj ).to.have.property( 'z' ).and.equal( 3 );
+			chai.assert.closeTo(obj.x, 1, 0.0001, 'x should override');
+			
+			// y overrides set but since <from> takes the current object state
+			// (wich was modified by <set>) it will end in 0.2 a not 2
+			chai.assert.closeTo(obj.y, 0.2, 0.0001, 'y should override');
+
+			// z is overrides entirely z
+			chai.assert.closeTo(obj.z, 3, 0.0001, 'z should override');
 		});
 
-		it( '[set, to, from, fromTo]: should no override properties on delay', function() {
+		it( '[set, to, from, fromTo]: should not override tweens props with smaller delays', function() {
 			var obj = { x: 0, y: 2, z: 0, w: 0 };
 
-			Tweenkey.set( obj, { x: 0.1, y: 0.2, z: 0.3, w: 0.4 });
+			Tweenkey.to( obj, 0.5, { x: 0.1, y: 0.2, z: 0.3, w: 0.4 });
 			Tweenkey.to( obj, 1, { x: 1, delay: 1 });
 			Tweenkey.from( obj, 1, { y: 0, delay: 1 });
 			Tweenkey.fromTo( obj, 1, { z: 1 }, { z: 3, delay: 1});
-			Tweenkey.update(0.5);
+			Tweenkey.update( 0.5 );
 
-			// x, y and z should not override set (delay is retaining)
+			// x, y and z should not override to (delay is retaining)
 			chai.assert.closeTo(obj.x, 0.1, 0.0001, 'x should not override');
 			chai.assert.closeTo(obj.y, 0.2, 0.0001, 'y should not override');
 			chai.assert.closeTo(obj.z, 0.3, 0.0001, 'z should not override');
+			Tweenkey.killAll();
+		});
+
+		it( '[set, to, from, fromTo]: should tween if execution times are not conflicting', function() {
+			var obj = { x: 0, y: 2, z: 0, w: 0 };
+
+			Tweenkey.to( obj, 0.5, { x: 0.1, y: 0.2, z: 0.3, w: 0.4 });
+			Tweenkey.to( obj, 1, { x: 1, delay: 1 });
+			Tweenkey.from( obj, 1, { y: 0, delay: 1 });
+			Tweenkey.fromTo( obj, 1, { z: 1 }, { z: 3, delay: 1});
+			Tweenkey.update( 1 );
+
+			// x, y and z should not be disabled by first tween
+			chai.assert.closeTo(obj.x, 1, 0.0001, 'x should the las scheduled tween');
+			chai.assert.closeTo(obj.y, 0.2, 0.0001, 'y be the last scheduled tween');
+			chai.assert.closeTo(obj.z, 3, 0.0001, 'z should be the last scheduled tween');
+			Tweenkey.killAll();
 		});
 	});
 
