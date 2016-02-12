@@ -13,13 +13,13 @@ function disableConsole( disabled ) {
 
 var tweenConstructors 	= [ 'set', 'from', 'to', 'fromTo' ];
 var tweenkeyMethods 	= [ 'autoUpdate', 'update', 'pauseAll', 'killAll', 'resumeAll', 'setFPS' ];
-var tweenMethods 		= [ 'pause', 'resume', 'kill', 'delay' ];
+var tweenMethods 		= [ 'pause', 'resume', 'kill', 'delay', 'timeScale', 'restart', 'reverse', 'seek' ];
 
 Tweenkey.autoUpdate( false );
 
 describe( 'tweenkey', function() {
 
-	describe( 'Tweenkey definition', function() {
+	describe( 'Tweenkey: definition', function() {
 
 		it( 'Should be defined', function() {
 			expect( Tweenkey ).not.to.be.undefined;
@@ -40,7 +40,7 @@ describe( 'tweenkey', function() {
 
 	});
 
-	describe( 'Tween constructors', function() {
+	describe( 'Tween: constructors', function() {
 
 		it( 'Should validate empty params', function() {
 			disableConsole( true );
@@ -80,7 +80,7 @@ describe( 'tweenkey', function() {
 
 	});
 
-	describe( 'Tweenkey accessors', function() {
+	describe( 'Tweenkey: accessors', function() {
 		it( 'killAll: should remove all active tweens', function() {
 			var tweens = [];
 
@@ -140,7 +140,7 @@ describe( 'tweenkey', function() {
 		});
 	});
 
-	describe( 'Tween definitions', function() {
+	describe( 'Tween: definitions', function() {
 
 		var basicParams = {
 			set: 	[ { x: 0 }, { x: 1 } ],
@@ -149,7 +149,7 @@ describe( 'tweenkey', function() {
 			fromTo: [ { x: 0 }, 1, { x: 1 }, { x: 2 } ]
 		};
 
-		it( 'Should respond to [pause, resume, kill, delay] methods', function() {
+		it( 'Should respond to [pause, resume, kill, delay, seek, restart, reverse] methods', function() {
 
 			tweenConstructors.forEach(function( cName ) {
 				var t = Tweenkey[ cName ].apply( null, basicParams[ cName ] );
@@ -163,7 +163,7 @@ describe( 'tweenkey', function() {
 
 	//chaining
 
-	describe( 'Tween callbacks', function() {
+	describe( 'Tween: callbacks', function() {
 
 		var invalidCallbacks = [ true, false, 1, 0, [], {}, undefined ];
 
@@ -267,7 +267,7 @@ describe( 'tweenkey', function() {
 				expect( tween ).to.respondTo( '_onComplete' );
 				expect( tween ).to.respondTo( '_onStart' );
 				expect( tween ).to.respondTo( '_onUpdate' );
-				expect( tween._target ).to.have.property( 'x' ).and.equal( 0 );
+				expect( tween._target.x ).to.equal( 0 );
 			});
 		});
 
@@ -275,10 +275,10 @@ describe( 'tweenkey', function() {
 			var obj = { x: 0 };
 			Tweenkey.from( obj, 1, { x: 1,
 				onUpdate: function( target ) {
-					expect( obj ).to.have.property( 'x' ).and.equal( 0 );
+					expect( obj.x ).to.equal( 0 );
 				},
 				onComplete: function( target ) {
-					expect( obj ).to.have.property( 'x' ).and.equal( 0 );
+					expect( obj.x ).to.equal( 0 );
 					done();
 				}
 			});
@@ -289,7 +289,7 @@ describe( 'tweenkey', function() {
 			var obj = { x: 0 };
 			Tweenkey.to( obj, 1, { x: 1,
 				onStart: function( target ) {
-					expect( obj ).to.have.property( 'x' ).and.equal( 0 );
+					expect( obj.x ).to.equal( 0 );
 					done();
 				}
 			});
@@ -323,10 +323,10 @@ describe( 'tweenkey', function() {
 			}, {
 				x: 1,
 				onUpdate: function( target ) {
-					expect( obj ).to.have.property( 'x' ).and.equal( 1 );
+					expect( obj.x ).to.equal( 1 );
 				},
 				onComplete: function( target ) {
-					expect( obj ).to.have.property( 'x' ).and.equal( 1 );
+					expect( obj.x ).to.equal( 1 );
 					done();
 				}
 			});
@@ -337,7 +337,7 @@ describe( 'tweenkey', function() {
 			var obj = { x: 0 };
 			Tweenkey.fromTo( obj, 1, { x: 2 }, { x: 1,
 				onStart: function( target ) {
-					expect( obj ).to.have.property( 'x' ).and.equal( 0 );
+					expect( obj.x ).to.equal( 0 );
 					done();
 				}
 			});
@@ -346,7 +346,7 @@ describe( 'tweenkey', function() {
 
 	});
 
-	describe( 'Tween linear interpolation', function() {
+	describe( 'Tween: linear interpolation', function() {
 
 		it( 'to: should interpolate linear properties by default', function() {
 			var obj = { x: 0 };
@@ -354,7 +354,7 @@ describe( 'tweenkey', function() {
 			for ( var i = 0; i < 10; i++ ) {
 				var expectedVal = i * 0.1;
 				// add tolerance to match property decimals between a range
-				expect( obj ).to.have.property( 'x' ).and.to.be.within( expectedVal - 0.0001,  expectedVal + 0.0001 );
+				expect( obj.x ).to.be.within( expectedVal - 0.0001,  expectedVal + 0.0001 );
 				Tweenkey.update( 0.1 );
 			}
 		});
@@ -369,7 +369,7 @@ describe( 'tweenkey', function() {
 
 			for ( var i = 0; i < 10; i++ ) {
 				var expectedVal = i * 0.1;
-				expect( obj ).to.have.property( 'x' ).and.to.be.within( expectedVal - 0.0001,  expectedVal + 0.0001 );
+				expect( obj.x ).to.be.within( expectedVal - 0.0001,  expectedVal + 0.0001 );
 				Tweenkey.update( 0.1 );
 			}
 		});
@@ -379,13 +379,13 @@ describe( 'tweenkey', function() {
 			Tweenkey.fromTo( obj, 1, { x: 0 }, { x: 1 });
 			for ( var i = 0; i < 10; i++ ) {
 				var expectedVal = i * 0.1;
-				expect( obj ).to.have.property( 'x' ).and.to.be.within( expectedVal - 0.0001,  expectedVal + 0.0001 );
+				expect( obj.x ).to.be.within( expectedVal - 0.0001,  expectedVal + 0.0001 );
 				Tweenkey.update( 0.1 );
 			}
 		});
 	});
 
-	describe( 'Tween multiple active tweens on single object', function() {
+	describe( 'Tween: multiple active tweens on single object', function() {
 		
 		it( '[set, to, from, fromTo]: should be able to modify different properties on same object', function() {
 			var obj = { x: 0, y: 0, z: 3, w: 0 };
@@ -396,10 +396,10 @@ describe( 'tweenkey', function() {
 			Tweenkey.fromTo(obj, 1, { w: 0 }, { w: 4 });
 			Tweenkey.update(1);
 
-			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
-			expect( obj ).to.have.property( 'y' ).and.equal( 2 );
-			expect( obj ).to.have.property( 'z' ).and.equal( 3 );
-			expect( obj ).to.have.property( 'w' ).and.equal( 4 );
+			expect( obj.x ).to.equal( 1 );
+			expect( obj.y ).to.equal( 2 );
+			expect( obj.z ).to.equal( 3 );
+			expect( obj.w ).to.equal( 4 );
 		});
 
 		it( '[set, to, from, fromTo]: should override same properties on same object', function() {
@@ -412,7 +412,7 @@ describe( 'tweenkey', function() {
 			Tweenkey.update(1);
 			
 			// w should be untouched
-			expect( obj ).to.have.property( 'w' ).and.equal( 0.4 );
+			expect( obj.w ).to.equal( 0.4 );
 			
 			// x overrided by to
 			chai.assert.closeTo(obj.x, 1, 0.0001, 'x should override');
@@ -458,16 +458,16 @@ describe( 'tweenkey', function() {
 		});
 	});
 
-	describe( 'Tween pause, resume and kill', function() {
+	describe( 'Tween: pause, resume and kill', function() {
 		it( 'set: should pause and resume', function() {
 			var obj = { x: 0 };
 
 			var tween = Tweenkey.set( obj, { x:1 }).pause();
 			Tweenkey.update( 1 );
-			expect( obj ).to.have.property( 'x' ).and.equal( 0 );
+			expect( obj.x ).to.equal( 0 );
 			tween.resume();
 			Tweenkey.update();
-			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
+			expect( obj.x ).to.equal( 1 );
 		});
 
 		it( 'set: should kill all its properties', function() {
@@ -475,7 +475,7 @@ describe( 'tweenkey', function() {
 
 			var tween = Tweenkey.set( obj, { x:1 }).kill();
 			Tweenkey.update( 1 );
-			expect( obj ).to.have.property( 'x' ).and.equal( 0 );
+			expect( obj.x ).to.equal( 0 );
 		});
 
 		it( 'set: should kill specific properties', function() {
@@ -483,8 +483,24 @@ describe( 'tweenkey', function() {
 
 			var tween = Tweenkey.set( obj, { x:1, y: 1 }).kill('y');
 			Tweenkey.update( 1 );
-			expect( obj ).to.have.property( 'x' ).and.equal( 1 );
-			expect( obj ).to.have.property( 'y' ).and.equal( 0 );
+			expect( obj.x ).to.equal( 1 );
+			expect( obj.y ).to.equal( 0 );
+		});
+	});
+
+	describe( 'Tween: timeScale', function() {
+		it( 'Should scale in time with param property and method call', function() {
+			var obj = { x: 0, y: 0 };
+			var tween = Tweenkey.to( obj, 1, { x:1, y: 1, timeScale: 2 });
+			Tweenkey.update( 0.5 );
+			expect( obj.x ).to.equal( 1 );
+		});
+
+		it( 'Should validate incorrect parameters', function() {
+			var obj = { x: 0, y: 0 };
+			var tween = Tweenkey.to( obj, 1, { x:1, y: 1, timeScale: 2 });
+			Tweenkey.update( 0.5 );
+			expect( obj.x ).to.equal( 1 );
 		});
 	});
 });
