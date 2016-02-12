@@ -19,7 +19,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     var lastTime = 0;
     var timeBehind = 0;
-    var autoUpdate = true;
 
     var _config = {
         autoUpdate: true,
@@ -170,8 +169,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     * Updates the properties of a given tween
     */
     function tweenTick( tween, dt ) {
+        var step = dt * tween._timeScale;
 
-        tween._delayLeft = m.max( tween._delayLeft - dt, 0 );
+        tween._delayLeft = m.max( tween._delayLeft - step, 0 );
 
         if ( tween._delayLeft == 0 ) {
 
@@ -187,7 +187,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 tween._onStart();
             }
 
-            tween._elapsedTime += dt;
+            tween._elapsedTime += step;
 
             // Default progress for tween.set
             tween._progress = 1;
@@ -339,11 +339,12 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             _progress       : 0,
             _elapsedTime    : 0,
             _alive          : true,
+            _delay          : delay,
+            _delayLeft      : delay,
+            _timeScale      : m.max( 0.01, Number( sParams.timeScale ) || 1 ),
             _duration       : _g.isNumber( duration ) ? m.max( 0, duration ) : 0,
             _running        : _g.isBoolean( sParams.autoStart ) ? sParams.autoStart : true,
             _ease           : _g.isFunction( sParams.ease ) ? sParams.ease : _g.lerp,
-            _delay          : delay,
-            _delayLeft      : delay,
             _onStart        : createCallback( sParams.onStart, tween ),
             _onUpdate       : createCallback( sParams.onUpdate, tween ),
             _onComplete     : createCallback( sParams.onComplete, tween ),
@@ -373,7 +374,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             this._delayLeft = this._delay = seconds;
             return this;
         },
-
+        timeScale: function( scale ) {
+            this._timeScale = m.max( 0.01, Number( scale ) || 1 );
+            return this;
+        },
         kill: function() {
             if ( arguments.length > 0 ) {
                 disableProperties( this, [].slice.call(arguments) );
@@ -383,12 +387,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             }
             return this;
         },
-
         pause: function() {
             this._running = false;
             return this;
         },
-
         resume: function() {
             this._running = true;
             return this;
@@ -405,7 +407,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     function setAutoUpdate( enabled ) {
-        autoUpdate = Boolean( enabled );
+        _config.autoUpdate = Boolean( enabled );
         if ( enabled ) {
             onFrame( 0 );
         }
@@ -442,7 +444,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             updateTweens( m.min( delta, _config.fpsStep * 2 ) );
         }
 
-        autoUpdate && rAF( onFrame );
+        _config.autoUpdate && rAF( onFrame );
     }
 
     function manualStep( step ) {
@@ -450,7 +452,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         if ( step < 0 ) {
             step = 0;
         }
-        ! autoUpdate && updateTweens( step );
+        ! _config.autoUpdate && updateTweens( step );
     }
 
     function newTweenFactory( type ) {
