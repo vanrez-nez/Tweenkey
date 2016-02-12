@@ -54,6 +54,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         isArray         : getTypeCheck( S_ARR ),
         isNumber        : getTypeCheck( S_NUM ),
         isBoolean       : getTypeCheck( S_BOOL ),
+        
         now: function() {
             return PERFORMANCE && PERFORMANCE.now && PERFORMANCE.now() || +new Date();
         },
@@ -71,15 +72,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 return last + ':' + TYPE_FNC.call( current )[ 8 ];
             }, '' ).slice( 1 );
             return sig == signature;
-        }
+        },
+        noop: function() { return false; }
     };
 
-    function createCallback( cb, tween ) {
-        var valid = _g.isFunction( cb );
-        return function() {
-            valid && cb.call( tween, tween._target );
-        };
-    }
+    
 
     /*
      * Disables only <enabled> properties of a tween and removes them from dictionary.
@@ -150,12 +147,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         this.enabled = true;
     }
 
-    Property.prototype = {
-        refresh: function() {
-            this.start = this.originProperties[ this.name ];
-            this.end = this.targetProperties[ this.name ];
-        }
-    };
+    Property.prototype.refresh = function() {
+        this.start = this.originProperties[ this.name ];
+        this.end = this.targetProperties[ this.name ];
+    }
 
     function Tween( type ) {
 
@@ -266,7 +261,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             // If originProperties is defined then override start values of the object
             originProperties = originProperties || currentTarget;
             var properties = [];
-
             for ( var key in targetProperties ) {
 
                 // Tweeneable param names can only be numbers and not tween property names
@@ -326,30 +320,28 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             duration = 0;
         }
 
-        // Select special params
-        var sParams = params2 || params1;
+        // Select config params
+        var cfg = params2 || params1;
 
         // Initialize tween properties
-        var delay = _g.isNumber( sParams.delay ) ? m.max( 0, sParams.delay ) : 0;
+        var delay = _g.isNumber( cfg.delay ) ? m.max( 0, cfg.delay ) : 0;
 
-        tween._target = target;
-
-        _g.extend( tween, {
-            _defined        : true,
-            _progress       : 0,
-            _elapsedTime    : 0,
-            _alive          : true,
-            _delay          : delay,
-            _delayLeft      : delay,
-            _timeScale      : m.max( 0.01, Number( sParams.timeScale ) || 1 ),
-            _duration       : _g.isNumber( duration ) ? m.max( 0, duration ) : 0,
-            _running        : _g.isBoolean( sParams.autoStart ) ? sParams.autoStart : true,
-            _ease           : _g.isFunction( sParams.ease ) ? sParams.ease : _g.lerp,
-            _onStart        : createCallback( sParams.onStart, tween ),
-            _onUpdate       : createCallback( sParams.onUpdate, tween ),
-            _onComplete     : createCallback( sParams.onComplete, tween ),
-            _params         : [ params1, params2 ]
-        }, true );
+        tween._target      = target;
+        tween._defined     = true;
+        tween._progress    = 0;
+        tween._elapsedTime = 0;
+        tween._alive       = true;
+        tween._delay       = delay;
+        tween._delayLeft   = delay;
+        tween._timeScale   = _g.isNumber( cfg.timeScale ) && cfg.timeScale > 0 ? cfg.timeScale: 1;
+        tween._duration    = _g.isNumber( duration ) ? m.max( 0, duration ) : 0;
+        tween._running     = _g.isBoolean( cfg.autoStart ) ? cfg.autoStart : true;
+        tween._ease        = _g.isFunction( cfg.ease ) ? cfg.ease : _g.lerp;
+        tween._onStart     = _g.isFunction( cfg.onStart ) ? cfg.onStart : _g.noop;
+        tween._onUpdate    = _g.isFunction( cfg.onUpdate ) ? cfg.onUpdate : _g.noop;
+        tween._onComplete  = _g.isFunction( cfg.onComplete ) ? cfg.onComplete : _g.noop;
+        tween._params      = [ params1, params2 ];
+        
     }
 
     Tween.prototype = {
@@ -374,8 +366,19 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             this._delayLeft = this._delay = seconds;
             return this;
         },
+        seek: function( position ) {
+            return this;
+        },
+        restart: function( supressEvents ) {
+            return this;
+        },
+        reverse: function() {
+            return this;
+        },
         timeScale: function( scale ) {
-            this._timeScale = m.max( 0.01, Number( scale ) || 1 );
+            if ( _g.isNumber( scale ) && scale > 0 ) {
+                this._timeScale = scale;
+            }
             return this;
         },
         kill: function() {
