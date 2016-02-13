@@ -168,7 +168,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     function Tween( type, params, signatureChecker ) {
         
         this._type = type;
-        this._defined = false;
+        this._initted = false;
 
         var target = params.shift();
         var validParams = signatureChecker( params );
@@ -177,7 +177,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         if ( validParams && validTarget ) {
             initTween( this, target, params );
         } else {
-            console.warn( 'Invalid tween parameters:', params );
+            throw "Invalid parameters";
         }
 
         return this;
@@ -437,7 +437,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         for ( var idx = tweens.length; idx--; ) {
             ! tweens[ idx ]._alive && tweens.splice( idx, 1 );
         }
-
 
         // update tweens (order matters)
         for ( var idx = 0, length = tweens.length; idx < length; idx++  ) {
