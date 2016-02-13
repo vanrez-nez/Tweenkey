@@ -42,11 +42,12 @@ describe( 'tweenkey', function() {
 
 	describe( 'Tween: constructors', function() {
 
+		var errorMessage = 'Invalid parameters';
+
 		it( 'Should validate empty params', function() {
 			disableConsole( true );
 			tweenConstructors.forEach(function( name ) {
-				expect( Tweenkey[ name ]() )
-				.to.have.property( '_defined' ).and.equal( false );
+				expect( Tweenkey[ name ] ).to.throw( errorMessage );
 			});
 			disableConsole( false );
 		});
@@ -55,8 +56,7 @@ describe( 'tweenkey', function() {
 			disableConsole( true );
 			tweenConstructors.forEach(function( name ) {
 				[ 1, null, true, function() {}, undefined ].forEach(function( val ) {
-					expect( Tweenkey[ name ]( val ) )
-					.to.have.property( '_defined' ).and.equal( false );
+					expect( Tweenkey[ name ].bind(this, val ) ).to.throw( errorMessage );
 				});
 			});
 			disableConsole( false );
@@ -69,8 +69,7 @@ describe( 'tweenkey', function() {
 
 			tweenConstructors.forEach(function( name ) {
 				[ [], null, true, function() {}, undefined ].forEach(function( val ) {
-					expect( Tweenkey[ name ]( val ) )
-					.to.have.property( '_defined' ).and.equal( false );
+					expect( Tweenkey[ name ].bind( this, val ) ).to.throw( errorMessage );
 				});
 			});
 			Tweenkey.killAll();
