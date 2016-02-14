@@ -332,7 +332,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     function pushTweenToRenderer( tween ) {
-        if ( tween._queued == false ) {
+        if ( ! tween._queued ) {
             resetTargetProperties( tween, tween._params[0], tween._params[1] );
             tweens.push( tween );
             
@@ -389,7 +389,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     function tweenSeek( tween, time, accountForDelay, inSeconds ) {
         
-        if ( _g.isNumber( time ) == false ) {
+        if ( ! _g.isNumber( time ) ) {
             return false;
         }
 
@@ -422,10 +422,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         },
         restart: function( delay ) {
             this._elapsedTime = 0;
-            this._delayLeft = _g.isNumber( delay ) ? delay : this._delay;
-            pushTweenToRenderer( this );
-            this._syncNextTick = false;
-            
+            this._delayLeft = m.max(0, _g.isNumber( delay ) ? delay : this._delay );
+            this._alive = true;
+            this._started = false;
+            this.resume();
             return this;
         },
         reverse: function() {
@@ -489,7 +489,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
         // clear killed tweens
         for ( var idx = tweens.length; idx--; ) {
-            if ( tweens[ idx ]._alive == false ) {
+            if ( ! tweens[ idx ]._alive ) {
                 tweens[ idx ]._queued = false;
                 tweens.splice( idx, 1 );
             }
@@ -503,6 +503,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     function onFrame( t ) {
 
+        if ( ! _config.autoUpdate ) {
+            return;
+        }
+
         var now = _g.now();
         var delta = ( now - lastTime ) / 1000 - timeBehind;
         timeBehind = m.max( timeBehind - _config.fpsStep, 0 );
@@ -513,11 +517,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             updateTweens( m.min( delta, _config.fpsStep * 2 ) );
         }
 
-        _config.autoUpdate && rAF( onFrame );
+        rAF( onFrame );
     }
 
     function manualStep( step ) {
-        step = Number( step || _config.fpsStep );
+        step = typeof step == 'number' ? step : _config.fpsStep;
         if ( step < 0 ) {
             step = 0;
         }
