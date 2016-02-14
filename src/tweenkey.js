@@ -185,16 +185,54 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         return this;
     }
 
+
+    function updateTweenProperties( tween ) {
+        var currentNode = tween._firstNode;
+        var updatedTargets = 0;
+
+        do {
+            var updated = false;
+            for ( var idx = currentNode.properties.length; idx--; ) {
+                var property = currentNode.properties[ idx ];
+                if ( property.enabled ) {
+                    currentNode.target[ property.name ] = tween._ease(
+                        tween._progress,
+                        property.start,
+                        property.end - property.start,
+                        1
+                    );
+
+                    updated = true;
+                } else {
+                    // We remove the property entirely to avoid performance
+                    // issues due many disabled properties looping.
+                    // Restarting the loop will bring back the removed
+                    // properties by calling resetTargetProperties()
+                    currentNode.properties.splice( idx, 1 );
+                }
+            }
+
+            updatedTargets += updated | 0;
+
+        } while ( currentNode = currentNode.next );
+
+        return updatedTargets;
+    }
+
     /*
     * Updates the properties of a given tween
     */
     function tweenTick( tween, dt ) {
         var step = dt * tween._timeScale;
+        
 
-        tween._delayLeft = m.max( tween._delayLeft - step, 0 );
+        if ( tween._delayLeft > 0 ) {
+            var delayStep = _g.clamp( step, 0, tween._delayLeft );
+            tween._delayLeft -= delayStep;
+            step -= delayStep;
+        }
 
         if ( tween._delayLeft == 0 ) {
-
 
             if ( tween._syncNextTick ) {
                 tween._syncNextTick = false;
@@ -219,35 +257,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 tween._progress = m.min( 1, tween._elapsedTime / tween._duration );
             }
 
-            // Update tween properties
-            var currentNode = tween._firstNode;
-            var updatedTargets = 0;
-
-            do {
-                var updated = false;
-                for ( var idx = currentNode.properties.length; idx--; ) {
-                    var property = currentNode.properties[ idx ];
-                    if ( property.enabled ) {
-                        currentNode.target[ property.name ] = tween._ease(
-                            tween._progress,
-                            property.start,
-                            property.end - property.start,
-                            1
-                        );
-
-                        updated = true;
-                    } else {
-                        // We remove the property entirely to avoid performance
-                        // issues due many disabled properties looping.
-                        // Restarting the loop will bring back the removed
-                        // properties by calling resetTargetProperties()
-                        currentNode.properties.splice( idx, 1 );
-                    }
-                }
-
-                updatedTargets += updated | 0;
-
-            } while ( currentNode = currentNode.next );
+            // Update tween properties with current progress
+            var updatedTargets = updateTweenProperties( tween );
 
             // Fire onUpdate notification only if one or more properties were updated
             if ( updatedTargets > 0 ) {
@@ -309,7 +320,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                         property.originProperties = targetProperties;
                     }
 
-                    //property.refresh();
+                    property.refresh();
                     properties.push( property );
                 }
             }
@@ -420,12 +431,30 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             tweenSeek( this, seconds, accountForDelay, true );
             return this;
         },
-        restart: function( delay ) {
+        render: function() {
+            overrideDictionaryProperties( this );
+            updateTweenProperties( this );
+        },
+        restart: function( accountForDelay, immediateRender ) {
+
+            // default for accountForDelay is false
+            accountForDelay = accountForDelay !== undefined ? accountForDelay : false;
+            
+            // default for immediateRender is true
+            immediateRender = immediateRender !== undefined ? immediateRender : true;
+
             this._elapsedTime = 0;
-            this._delayLeft = m.max(0, _g.isNumber( delay ) ? delay : this._delay );
+            this._progress = 0;
+
+            this._delayLeft = accountForDelay ? this._delay : 0;
             this._alive = true;
             this._started = false;
             this.resume();
+
+            if ( immediateRender || this._delayLeft > 0 ) {
+                this.render();
+            }
+
             return this;
         },
         reverse: function() {
