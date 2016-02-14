@@ -1,19 +1,7 @@
 
-var cl = console;
-function disableConsole( disabled ) {
-	if ( disabled ) {
-		var stub = {}, methods = [ 'log', 'warn', 'error', 'info' ];
-		for ( var i = 0; i < methods.length; i++ )
-			stub[ methods[ i ] ] = function() {};
-		console = stub;
-	} else {
-		console = cl;
-	}
-}
-
 var tweenConstructors 	= [ 'set', 'from', 'to', 'fromTo' ];
 var tweenkeyMethods 	= [ 'autoUpdate', 'update', 'pauseAll', 'killAll', 'resumeAll', 'setFPS' ];
-var tweenMethods 		= [ 'pause', 'resume', 'kill', 'delay', 'timeScale', 'restart', 'reverse', 'seek' ];
+var tweenMethods 		= [ 'pause', 'resume', 'kill', 'delay', 'timeScale', 'restart', 'reverse', 'time', 'progress' ];
 
 Tweenkey.autoUpdate( false );
 
@@ -45,27 +33,23 @@ describe( 'tweenkey', function() {
 		var errorMessage = 'Invalid parameters';
 
 		it( 'Should validate empty params', function() {
-			disableConsole( true );
 			tweenConstructors.forEach(function( name ) {
 				expect( Tweenkey[ name ] ).to.throw( errorMessage );
 			});
-			disableConsole( false );
 		});
 
 		it( 'Should validate wrong target types', function() {
-			disableConsole( true );
+
 			tweenConstructors.forEach(function( name ) {
 				[ 1, null, true, function() {}, undefined ].forEach(function( val ) {
 					expect( Tweenkey[ name ].bind(this, val ) ).to.throw( errorMessage );
 				});
 			});
-			disableConsole( false );
+
 		});
 
 
 		it( 'Should validate additional params', function() {
-
-			disableConsole( true );
 
 			tweenConstructors.forEach(function( name ) {
 				[ [], null, true, function() {}, undefined ].forEach(function( val ) {
@@ -74,7 +58,6 @@ describe( 'tweenkey', function() {
 			});
 			Tweenkey.killAll();
 
-			disableConsole( false );
 		});
 
 	});
@@ -441,18 +424,35 @@ describe( 'tweenkey', function() {
 		});
 
 		it( '[set, to, from, fromTo]: should tween if execution times are not conflicting', function() {
+			var precision = 0.00001;
 			var obj = { x: 0, y: 2, z: 0, w: 0 };
 
-			Tweenkey.to( obj, 0.5, { x: 0.1, y: 0.2, z: 0.3, w: 0.4 });
-			Tweenkey.to( obj, 1, { x: 1, delay: 1 });
-			Tweenkey.from( obj, 1, { y: 0, delay: 1 });
-			Tweenkey.fromTo( obj, 1, { z: 1 }, { z: 3, delay: 1});
-			Tweenkey.update( 1 );
+			Tweenkey.to( obj, 0.5, { x: 0.1, y: 0.2, z: 0.3, w: 0.4 }); // t1
+			Tweenkey.to( obj, 1, { x: 1, delay: 1 }); // t2
+			Tweenkey.from( obj, 1, { y: 0, delay: 1 }); // t3
+			Tweenkey.fromTo( obj, 1, { z: 1 }, { z: 3, delay: 1}); // t4
+			
+			Tweenkey.update( 0.5 ); // end point of t1
 
-			// x, y and z should not be disabled by first tween
-			chai.assert.closeTo(obj.x, 1, 0.0001, 'x should the las scheduled tween');
-			chai.assert.closeTo(obj.y, 0.2, 0.0001, 'y be the last scheduled tween');
-			chai.assert.closeTo(obj.z, 3, 0.0001, 'z should be the last scheduled tween');
+			// delayed tweens after t1 should not disable the properties of t1
+			chai.assert.closeTo( obj.x, 0.1, precision );
+			chai.assert.closeTo( obj.y, 0.2, precision );
+			chai.assert.closeTo( obj.z, 0.3, precision );
+
+			Tweenkey.update(1.5); // end point of t2, t3 and t4
+
+			// t2, t3 and t4 should tween x, y and z after delay
+			chai.assert.closeTo(obj.x, 1, precision, 'x should the last scheduled tween');
+
+			// [from] tween here is a special case where the target
+			// start point of the property was modified by the first tween
+			// hence the end point is not 2 but 0.2, this is intended because
+			// it would be weird to have tweens saving states and operating with
+			// old values. In cases where user needs to actually save a start point,
+			// it should use the fromTo to have explicit behaviour.
+			chai.assert.closeTo(obj.y, 0.2, precision, 'y be the last scheduled tween');
+
+			chai.assert.closeTo(obj.z, 3, precision, 'z should be the last scheduled tween');
 			Tweenkey.killAll();
 		});
 	});
@@ -502,4 +502,93 @@ describe( 'tweenkey', function() {
 			expect( obj.x ).to.equal( 1 );
 		});
 	});
+
+	describe( 'Tween: progress, time and restart', function() {
+		
+		it ('Should work setting time', function( done ) {
+			var obj = { x: 0 };
+			var t = Tweenkey.to( obj, 10, {
+				x: 10, 
+				onUpdate: function() {
+					chai.assert.closeTo(obj.x, 5, 0.0001, 'first update should start on 5');
+					done();
+				}
+			});
+			t.time( 5 );
+			Tweenkey.update( 0 );
+			t.kill();
+		});
+
+		it ('Should work setting progress', function( done ) {
+			var obj = { x: 0 };
+			var t = Tweenkey.to( obj, 10, { 
+				x: 10, 
+				onUpdate: function() {
+					expect( obj.x ).to.equal(5);
+					done();
+				}
+			});
+			t.progress( 0.5 );
+			Tweenkey.update( 0 );
+			t.kill();
+		})
+
+		it ('Should validate [time, restart and progress] with invalid parameters', function() {
+			var invalidParams = [-1, NaN, Infinity, undefined, {}, [], window];
+			var obj = { x: 0 };
+			var t = Tweenkey.to( obj, 10, {x: 1 });
+
+			for (var idx = invalidParams; idx--; ) {
+				var param = invalidParams[ param ];
+				Tweenkey.update( 0 );
+				expect(t.restart.bind(t, param)).to.not.throw(Error);
+				expect(t.progress.bind(t, param)).to.not.throw(Error);
+				expect(t.time.bind(t, param)).to.not.throw(Error);
+			}
+
+			// modify values of x to 0.5
+			t.restart();
+			Tweenkey.update(5);
+			expect( obj.x ).to.equal( 0.5 );
+
+			// Should take inmediate effect (no need for next frame)
+			// aka inmmediate render to set the properties
+
+			t.restart();
+			expect( obj.x ).to.equal( 0 );
+
+			// 
+			Tweenkey.update(10);
+			expect( obj.x ).to.equal( 1 );
+			t.kill();
+		});
+
+
+		it ('Restart should work with delay parameter', function() {
+			Tweenkey.killAll();
+			var obj = { x: 0 };
+			var t = Tweenkey.to( obj, 2, { x: 1, delay: 1 });
+
+			Tweenkey.update( 1.5 );
+			t.restart( true );
+			
+			// After restart all properties must be resetted
+			expect( obj.x ).to.equal( 0 );
+
+			// When accounting for delay update should not modify properties yet
+			Tweenkey.update( 0.5 );
+			expect( obj.x ).to.equal( 0 );
+
+
+			t.restart( true );
+
+			// Finally restart should touch x accounting for delay
+			Tweenkey.update( 2 );
+			expect( obj.x ).to.equal( 0.5 );
+		});
+
+		it ('Progress and time should work with accountForDelay parameter', function() {
+
+		});
+	})
 });
