@@ -65,7 +65,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         isArray         : getTypeCheck( S_ARR ),
         isNumber        : getTypeCheck( S_NUM ),
         isBoolean       : getTypeCheck( S_BOOL ),
-        
+        clamp: function( value, min, max ) {
+            return m.min( m.max( value, min ), max );
+        },
         now: function() {
             return PERFORMANCE && PERFORMANCE.now && PERFORMANCE.now() || +new Date();
         },
@@ -193,14 +195,18 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
         if ( tween._delayLeft == 0 ) {
 
-            if ( tween._elapsedTime == 0 ) {
-                
+
+            if ( tween._syncNextTick ) {
+                tween._syncNextTick = false;
                 // Update current properties from targets
                 syncTargetProperties( tween );
 
                 // Kill all previous active properties in tween
                 overrideDictionaryProperties( tween );
-                
+            }
+
+            if ( ! tween._started ) {
+                tween._started = true;
                 // Fire onStart notification
                 tween._onStart();
             }
@@ -263,7 +269,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 tween.kill();
             }
         }
-
     }
 
     /*
@@ -327,8 +332,19 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     function pushTweenToRenderer( tween ) {
-        resetTargetProperties( tween, tween._params[0], tween._params[1] );
-        tweens.push( tween );
+        if ( tween._queued == false ) {
+            resetTargetProperties( tween, tween._params[0], tween._params[1] );
+            tweens.push( tween );
+            
+            // flag to avoid pushing again to renderer
+            tween._queued = true; 
+
+            // refresh all properties
+            tween._syncNextTick = true;
+
+            // fire onStart event
+            tween._started = false;
+        }
     }
 
     function initTween( tween, target, params ) {
@@ -348,21 +364,47 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
         // Initialize tween properties
         var delay = _g.isNumber( cfg.delay ) ? m.max( 0, cfg.delay ) : 0;
-        tween._target      = target;
-        tween._initted     = true;
-        tween._progress    = 0;
-        tween._elapsedTime = 0;
-        tween._alive       = true;
-        tween._delay       = delay;
-        tween._delayLeft   = delay;
-        tween._timeScale   = _g.isNumber( cfg.timeScale ) && cfg.timeScale > 0 ? cfg.timeScale: 1;
-        tween._duration    = _g.isNumber( duration ) ? m.max( 0, duration ) : 0;
-        tween._running     = _g.isBoolean( cfg.autoStart ) ? cfg.autoStart : true;
-        tween._ease        = _g.isFunction( cfg.ease ) ? cfg.ease : _g.lerp;
-        tween._onStart     = _g.isFunction( cfg.onStart ) ? cfg.onStart : _g.noop;
-        tween._onUpdate    = _g.isFunction( cfg.onUpdate ) ? cfg.onUpdate : _g.noop;
-        tween._onComplete  = _g.isFunction( cfg.onComplete ) ? cfg.onComplete : _g.noop;
-        tween._params      = [ params1, params2 ];
+
+        tween._target       = target;
+        tween._initted      = true;
+        tween._started      = false;
+        tween._queued       = false;
+        tween._syncNextTick = true;
+        tween._progress     = 0;
+        tween._elapsedTime  = 0;
+        tween._alive        = true;
+        tween._delay        = delay;
+        tween._delayLeft    = delay;
+        tween._yoyo         = _g.isBoolean( cfg.yoyo ) ? cfg.yoyo : false;
+        tween._repeat       = _g.isNumber( cfg.repeat ) ? cfg.repeat : 0;
+        tween._timeScale    = _g.isNumber( cfg.timeScale ) && cfg.timeScale > 0 ? cfg.timeScale: 1;
+        tween._duration     = _g.isNumber( duration ) ? m.max( 0, duration ) : 0;
+        tween._running      = _g.isBoolean( cfg.autoStart ) ? cfg.autoStart : true;
+        tween._ease         = _g.isFunction( cfg.ease ) ? cfg.ease : _g.lerp;
+        tween._onStart      = _g.isFunction( cfg.onStart ) ? cfg.onStart : _g.noop;
+        tween._onUpdate     = _g.isFunction( cfg.onUpdate ) ? cfg.onUpdate : _g.noop;
+        tween._onComplete   = _g.isFunction( cfg.onComplete ) ? cfg.onComplete : _g.noop;
+        tween._params       = [ params1, params2 ];
+    }
+
+    function tweenSeek( tween, time, accountForDelay, inSeconds ) {
+        
+        if ( _g.isNumber( time ) == false ) {
+            return false;
+        }
+
+        var accountForDelay = _g.isBoolean( accountForDelay ) ? accountForDelay : false;
+        var totalDuration = accountForDelay ? tween._duration + tween._delay : tween._duration;
+        time = _g.clamp( time, 0, inSeconds ? totalDuration : 1);
+        var timeSeconds = inSeconds ? time : time * totalDuration;
+        
+        tween._elapsedTime = timeSeconds;
+
+        if ( accountForDelay && timeSeconds > tween._delay ) {
+            tween._delayLeft = timeSeconds - ( timeSeconds - tween._delay );
+            tween._elapsedTime -= tween._delayLeft;
+        }
+        
     }
 
     Tween.prototype = {
@@ -370,10 +412,20 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             this._delayLeft = this._delay = seconds;
             return this;
         },
-        seek: function( position ) {
+        progress: function( progress, accountForDelay ) {
+            tweenSeek( this, progress, accountForDelay, false );
             return this;
         },
-        restart: function( supressEvents ) {
+        time: function( seconds, accountForDelay ) {
+            tweenSeek( this, seconds, accountForDelay, true );
+            return this;
+        },
+        restart: function( delay ) {
+            this._elapsedTime = 0;
+            this._delayLeft = _g.isNumber( delay ) ? delay : this._delay;
+            pushTweenToRenderer( this );
+            this._syncNextTick = false;
+            
             return this;
         },
         reverse: function() {
@@ -387,6 +439,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         },
         kill: function() {
             if ( arguments.length > 0 ) {
+
+                // fix: avoid optimization bailout
                 var args = [];
                 for ( var i = 0; i < arguments.length; ++i ) {
                     args[ i ] = arguments[ i ];
@@ -404,6 +458,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         },
         resume: function() {
             this._running = true;
+            pushTweenToRenderer( this );
             return this;
         }
     };
@@ -430,12 +485,14 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         }
     }
 
-
     function updateTweens( delta ) {
 
         // clear killed tweens
         for ( var idx = tweens.length; idx--; ) {
-            ! tweens[ idx ]._alive && tweens.splice( idx, 1 );
+            if ( tweens[ idx ]._alive == false ) {
+                tweens[ idx ]._queued = false;
+                tweens.splice( idx, 1 );
+            }
         }
 
         // update tweens (order matters)
@@ -475,7 +532,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
         return function create() {
 
-            // fix: V8 optimization-killer
+            // fix: avoid optimization bailout
             // https://github.com/petkaantonov/bluebird/wiki/Optimization-killers
             var args = [];
             for ( var i = 0; i < arguments.length; ++i ) {
