@@ -14,14 +14,13 @@ Micro animation library for javascript.
 - [x] Handle multiple active tweens into the same object overriding active properties.
 - [x] Support for killing specific attributes only.
 - [x] Add support to control FPS.
-- [ ] Add timescale property for tween.
-- [ ] Add support to handle restarts on tweens.
+- [x] Add timescale property for tween.
+- [x] Add support to handle restarts on tweens.
+- [x] Add support to seek a specific position of current tween (progress and time accessors).
 - [ ] Add reverse and yoyo functionality.
 - [ ] Add repeat count, repeatDelay and onRepeat callback parameters.
-- [ ] Add support to seek a specific position of current tween.
 - [ ] Add ticker support with kill, pause, resume and fps controls per instance.
 - [ ] Add support for immediate render param on set, from and fromTo tweens.
-- [ ] Add support to restart the tween.
 - [ ] Add plugin support.
 - [ ] Test & optimize main loop.
 - [ ] Make demo webpage.
