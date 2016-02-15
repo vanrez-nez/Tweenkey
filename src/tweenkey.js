@@ -249,7 +249,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 tween._onStart();
             }
 
-            tween._elapsedTime += step;
+            tween._elapsedTime += step * tween._direction;
+            if ( tween._elapsedTime < 0 ) {
+                tween._elapsedTime = 0;
+            }
 
             // Default progress for tween.set
             tween._progress = 1;
@@ -272,7 +275,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         }
 
         // Tween finished?
-        if ( tween._elapsedTime >= tween._duration ) {
+        if ( tween._direction == 1 && tween._elapsedTime >= tween._duration ||
+            tween._direction == -1 && tween._elapsedTime == 0 ) {
             if ( tween._alive ) {
                 tween._onComplete();
                 
@@ -381,6 +385,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         tween._started      = false;
         tween._queued       = false;
         tween._syncNextTick = true;
+        tween._direction    = 1;
         tween._progress     = 0;
         tween._elapsedTime  = 0;
         tween._alive        = true;
@@ -448,6 +453,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
             this._delayLeft = accountForDelay ? this._delay : 0;
             this._alive = true;
+            this._direction = 1;
             this._started = false;
             this.resume();
 
@@ -458,6 +464,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             return this;
         },
         reverse: function() {
+            this._direction *= -1;
             return this;
         },
         timeScale: function( scale ) {
