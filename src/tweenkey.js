@@ -277,12 +277,27 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         // Tween finished?
         if ( tween._direction == 1 && tween._elapsedTime >= tween._duration ||
             tween._direction == -1 && tween._elapsedTime == 0 ) {
+
             if ( tween._alive ) {
-                tween._onComplete();
-                
-                // loop count validation should be in here
-                tween.kill();
+             
+                if ( tween._repeatLeft > 0 ) {
+                    tween._repeatLeft--;
+                }
+
+                if ( tween._repeatLeft == 0 ) {
+                    tween._onComplete();
+                    tween.kill();
+                } else {
+                    if ( tween._yoyo ) {
+                        tween._direction *= -1;
+                    } else {
+                        tween._elapsedTime = 0;
+                    }
+                    tween._delayLeft = tween._repeatDelay;
+                    tween._onRepeat();
+                }
             }
+        
         }
     }
 
@@ -379,6 +394,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
         // Initialize tween properties
         var delay = _g.isNumber( cfg.delay ) ? m.max( 0, cfg.delay ) : 0;
+        var repeatCount = _g.isNumber( cfg.repeat ) ? cfg.repeat : 0;
 
         tween._target       = target;
         tween._initted      = true;
@@ -391,8 +407,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         tween._alive        = true;
         tween._delay        = delay;
         tween._delayLeft    = delay;
+        tween._repeat       = repeatCount;
+        tween._repeatLeft   = repeatCount;
+        tween._repeatDelay  = _g.isNumber( cfg.repeatDelay ) ? m.max( 0, cfg.repeatDelay ) : 0;
         tween._yoyo         = _g.isBoolean( cfg.yoyo ) ? cfg.yoyo : false;
-        tween._repeat       = _g.isNumber( cfg.repeat ) ? cfg.repeat : 0;
         tween._timeScale    = _g.isNumber( cfg.timeScale ) && cfg.timeScale > 0 ? cfg.timeScale: 1;
         tween._duration     = _g.isNumber( duration ) ? m.max( 0, duration ) : 0;
         tween._running      = _g.isBoolean( cfg.autoStart ) ? cfg.autoStart : true;
@@ -400,6 +418,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         tween._onStart      = _g.isFunction( cfg.onStart ) ? cfg.onStart : _g.noop;
         tween._onUpdate     = _g.isFunction( cfg.onUpdate ) ? cfg.onUpdate : _g.noop;
         tween._onComplete   = _g.isFunction( cfg.onComplete ) ? cfg.onComplete : _g.noop;
+        tween._onRepeat     = _g.isFunction( cfg.onRepeat ) ? cfg.onRepeat : _g.noop;
         tween._params       = [ params1, params2 ];
     }
 
