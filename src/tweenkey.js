@@ -9,6 +9,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     var rAF, cAF;
     var tweens = [];
+    var tickers = [];
+    var mainTicker;
 
     // Flat dictionary to track all objects properties.
     // Id's are formed from objectId + propertyName
@@ -17,12 +19,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     var m = Math;
 
-    var lastTime = 0;
-    var timeBehind = 0;
-
     var _config = {
-        autoUpdate: true,
-        fpsStep: 1 / 60
+        autoUpdate: true 
     };
 
     var TYPE_FNC = ({}).toString;
@@ -257,7 +255,17 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             // Default progress for tween.set
             tween._progress = 1;
             if ( tween._duration > 0 ) {
-                tween._progress = m.min( 1, tween._elapsedTime / tween._duration );
+                
+                tween._progress = m.round( ( tween._elapsedTime / tween._duration ) * 10000 ) / 10000;
+
+                if ( tween._progress > 1 ) {
+                    tween._progress = 1;
+                }
+
+                if ( tween._progress < 0 ) {
+                    tween._progress = 0;
+                }
+
             }
 
             // Update tween properties with current progress
@@ -527,19 +535,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         };
     }
 
-    function setAutoUpdate( enabled ) {
-        _config.autoUpdate = Boolean( enabled );
-        if ( enabled ) {
-            onFrame( 0 );
-        }
-    }
-
-    function setFPS( fps ) {
-        if ( _g.isNumber( fps ) && fps > 0 ) {
-            _config.fpsStep = 1 / fps;
-        }
-    }
-
     function updateTweens( delta ) {
 
         // clear killed tweens
@@ -556,23 +551,89 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         }
     }
 
-    function onFrame( t ) {
-
-        if ( ! _config.autoUpdate ) {
-            return;
-        }
+    function onFrame() {
 
         var now = _g.now();
-        var delta = ( now - lastTime ) / 1000 - timeBehind;
-        timeBehind = m.max( timeBehind - _config.fpsStep, 0 );
+        var requestNextFrame = false;
 
-        if ( delta > _config.fpsStep ) {
-            lastTime = now;
-            timeBehind = delta % _config.fpsStep;
-            updateTweens( m.min( delta, _config.fpsStep * 2 ) );
+        if ( mainTicker._running ) {
+            mainTicker.tick( now );
+            requestNextFrame = true;
         }
 
-        rAF( onFrame );
+        // Update tickers
+        for ( var idx = tickers.length; idx--; ) {
+            
+            var ticker = tickers[ idx ];
+            
+            if ( ticker._running ) {
+                ticker.tick( now );
+                requestNextFrame = true;
+            }
+
+            if ( ! ticker._alive ) {
+                tickers.splice( idx, 1 );
+            }
+        }
+
+        if ( requestNextFrame ) {
+            rAF( onFrame );
+        }
+    }
+
+    function newTicker( params ) {
+        var ticker = new Ticker( params );
+        tickers.push(ticker);
+        return ticker;
+    }
+
+    function Ticker( params ) {
+        params = params || {};
+        this._onTick = _g.isFunction( params.onTick ) ? params.onTick : _g.noop;
+        this._alive = true;
+        this._timeBehind = 0;
+        this.setFPS( params.fps );
+        this.resume();
+    }
+
+    Ticker.prototype = {
+        pause: function() {
+            this._running = false;
+        },
+        resume: function() {
+            this._lastTime = _g.now();
+            this._running = true;
+            rAF( onFrame );
+        },
+        kill: function() {
+            this._alive = false;
+        },
+        tick: function( time ) {
+            var delta = ( time - this._lastTime ) / 1000 - this._timeBehind;
+            this._timeBehind = m.max( this._timeBehind - this._fpsStep, 0 );
+
+            if ( delta > this._fpsStep ) {
+                this._lastTime = time;
+                this._timeBehind = delta % this._fpsStep;
+                this._onTick( m.min( delta, this._fpsStep * 2 ) );
+            }
+        },
+        setFPS: function( fps ) {
+            if ( _g.isNumber( fps ) && fps > 0 ) {
+                this._fpsStep = 1 / fps;
+            } else {
+                this._fpsStep = 1 / 60;
+            }
+        }
+    }
+
+    function setAutoUpdate( enabled ) {
+        _config.autoUpdate = Boolean( enabled );
+        if ( enabled ) {
+            mainTicker.resume();
+        } else {
+            mainTicker.pause();
+        }
     }
 
     function manualStep( step ) {
@@ -639,7 +700,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         };
     })();
 
-    onFrame( 0 );
+    mainTicker = new Ticker({ onTick: updateTweens });
 
     return {
         set         : newTweenFactory( TWEEN_SET ),
@@ -649,9 +710,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         killAll     : executeOnAllTweens( 'kill' ),
         pauseAll    : executeOnAllTweens( 'pause' ),
         resumeAll   : executeOnAllTweens( 'resume' ),
+        ticker      : newTicker,
         update      : manualStep,
         autoUpdate  : setAutoUpdate,
-        setFPS      : setFPS
+        setFPS      : mainTicker.setFPS
   };
 })( window );
 
