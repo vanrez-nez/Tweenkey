@@ -19,10 +19,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     var m = Math;
 
-    var _config = {
-        autoUpdate: true 
-    };
-
     var TYPE_FNC = ({}).toString;
     var PERFORMANCE = wnd.performance;
 
@@ -628,7 +624,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     function setAutoUpdate( enabled ) {
-        _config.autoUpdate = Boolean( enabled );
         if ( enabled ) {
             mainTicker.resume();
         } else {
@@ -637,11 +632,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     function manualStep( step ) {
-        step = typeof step == 'number' ? step : _config.fpsStep;
+        step = typeof step == 'number' ? step : mainTicker._fpsStep;
         if ( step < 0 ) {
             step = 0;
         }
-        ! _config.autoUpdate && updateTweens( step );
+        ! mainTicker._running && updateTweens( step );
     }
 
     function newTweenFactory( type ) {        
@@ -713,7 +708,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         ticker      : newTicker,
         update      : manualStep,
         autoUpdate  : setAutoUpdate,
-        setFPS      : mainTicker.setFPS
+        setFPS      : mainTicker.setFPS.bind( mainTicker )
   };
 })( window );
 
