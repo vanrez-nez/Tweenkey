@@ -68,8 +68,8 @@ describe( 'tweenkey', function() {
 
 			for (var i = 10; i--; ) {
 				var obj = {x: 0, y: 0, z: 1, w: 0};
-				tweens.push(Tweenkey.set(obj, { x:1, delay: 1 }) );
-				tweens.push(Tweenkey.set(obj, { x:1 }) );
+				tweens.push(Tweenkey.set(obj, { x: 1, delay: 1 }) );
+				tweens.push(Tweenkey.set(obj, { x: 1 }) );
 				tweens.push(Tweenkey.to(obj, 1, { y:2 }) );
 				tweens.push(Tweenkey.from(obj, 1, { z:3 }) );
 				tweens.push(Tweenkey.from(obj, 1, { z:3, delay: 1 }) );
@@ -85,29 +85,65 @@ describe( 'tweenkey', function() {
 		});
 
 		it( 'pauseAll: should pause all active tweens', function() {
+			var tweens = [];
+			for (var i = 10; i--; ) {
+				tweens.push(Tweenkey.set( { x: 0 }, { x:1 }) );
+				tweens.push(Tweenkey.to( { x: 0 }, 1, { x:1 }) );
+				tweens.push(Tweenkey.from( { x: 0 }, 1, { x:1 }) );
+				tweens.push(Tweenkey.fromTo( { x: 0 }, 1, { x:0 }, { x:1 }) );
+			}
+			Tweenkey.pauseAll();
+			Tweenkey.update(1);
+			for (var i = tweens.length; i--; ) {
+				expect(tweens[i]).to.have.property('_running').and.equal(false);
+				expect(tweens[i]._target.x).to.equal(0);
+			}
 
+			// cleanup
+			Tweenkey.killAll();
+			Tweenkey.update();
 		});
 
 		it( 'resumeAll: should resume all paused tweens', function() {
+			var tweens = [];
+			for (var i = 10; i--; ) {
+				// set is not tested for resume
+				tweens.push(Tweenkey.to( { x: 0 }, 1, { x:1 }) );
+				tweens.push(Tweenkey.from( { x: 0 }, 1, { x:1 }) );
+				tweens.push(Tweenkey.fromTo( { x: 0 }, 1, { x:0 }, { x:1 }) );
+			}
+			
+			Tweenkey.pauseAll();
+			Tweenkey.update(1);
+			Tweenkey.resumeAll();
+			Tweenkey.update(0.5);
 
+			for (var i = tweens.length; i--; ) {
+				expect(tweens[i]).to.have.property('_running').and.equal(true);
+				expect(tweens[i]._target.x).to.equal(0.5);
+			}
+
+			// cleanup
+			Tweenkey.killAll();
+			Tweenkey.update();
 		});
 
 		it( 'setFPS: should adjust speed of updating', function(done) {
 
-			var fps = 10;
 			var updateCount = 0;
 
 			Tweenkey.killAll();
-			Tweenkey.setFPS(fps);
+			Tweenkey.setFPS(10);
 			Tweenkey.autoUpdate(true);
 
 			// In half second should be 5 updates since fps is 10.
 			// This value can be unpredictible with higher granularity
 			// since requestAnimationFrame is not warranted to be on time.
-			// If user needs exact updates he should be using manual updates,
+			// If user needs exact updates it should be using manual updates,
 			// in other words this won't work with physics loops that need 
 			// a precise number of iterations in time.
-			Tweenkey.to({x:0}, 0.5, { x:1, onUpdate: function() {
+			Tweenkey.to({ x:0 }, 0.5, { x:1,
+				onUpdate: function() {
 					updateCount++;
 				},
 				onComplete: function() {
@@ -144,6 +180,62 @@ describe( 'tweenkey', function() {
 	});
 
 	//chaining
+	describe( 'Tween: method chaining', function() {
+		
+		it( '[set, to, from, fromTo]: accessors should return the object instance', function() {
+			var tweens = [];
+			var accessors = [
+				{ name: 'kill', 		params: [] },
+				{ name: 'delay', 		params: [ 0 ] },
+				{ name: 'progress', 	params: [ 0 ] },
+				{ name: 'time', 		params: [ 0 ] },
+				{ name: 'restart', 		params: [] },
+				{ name: 'reverse', 		params: [] },
+				{ name: 'timeScale', 	params: [ 1 ] },
+				{ name: 'pause', 		params: [] }
+			];
+
+			tweens.push( Tweenkey.set( { x: 0 }, { x: 1 } ) );
+			tweens.push( Tweenkey.to( { x: 0 }, 1, { x: 1 } ) );
+			tweens.push( Tweenkey.from( { x: 0 }, 1, { x: 1 } ) );
+			tweens.push( Tweenkey.fromTo( { x: 0 }, 1, { x: 0 }, { x: 1 } ) );
+
+			for ( var tIdx = tweens.length; tIdx--; ) {
+				
+				var t = tweens[tIdx];
+				expect(t.toString()).to.equal('[object Tween]');
+
+				for ( var aIdx = accessors.length; aIdx--; ) {
+					var accessor = accessors[ aIdx ];
+					var res = t[ accessor.name ].apply( t, accessor.params );
+					expect( res.toString() ).to.equal( '[object Tween]' );
+				}
+			}
+
+			// cleanup
+			Tweenkey.killAll();
+			Tweenkey.update();
+		});
+
+		it( 'ticker: accessors should return the object instance', function() {
+			var accessors = [
+				{ name: 'pause', 	params: [] },
+				{ name: 'resume', 	params: [] },
+				{ name: 'tick', 	params: [ 0 ] },
+				{ name: 'setFPS', 	params: [ 10 ] },
+				{ name: 'kill', 	params: [] }
+			];
+
+			var ticker = Tweenkey.ticker();
+			for ( var idx = accessors.length; idx--; ) {
+				var accessor = accessors[ idx ];
+				var res = ticker[ accessor.name ].apply( ticker, accessor.params );
+				expect( res.toString() ).to.equal( '[object Ticker]' );
+			}
+
+		});
+
+	});
 
 	describe( 'Tween: callbacks', function() {
 
