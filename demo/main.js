@@ -1,152 +1,77 @@
-(function() {
-    console.log('Ready!');
-    var canvas = document.getElementById('target');
-    var ctx = canvas.getContext('2d');
+var obj = { x:0 };
 
-    canvas.width = 800;
-    canvas.height = 600;
-    var hW = canvas.width / 2;
-    var hH = canvas.height / 2;
-
-    
-
-    var easeInQuad = function (t, b, c, d) {
-		return c*(t/=d)*t + b;
-	};
-
-	function getRandomNumber(min, max) {
-    	return Math.random() * (max - min) + min;
+var t = Tweenkey.to(obj, 1, {
+	x: 1,
+	onRepeat: function() {
+		console.log('repeat!');
+	},
+	onUpdate: function() {
+		console.log(obj.x);
+	},
+	onStart: function() {
+		console.log('onStart');
+	},
+	onComplete: function() {
+		console.log('onComplete');
 	}
-
-	function getRandomColor() {
-	    // http://stackoverflow.com/questions/1484506/random-color-generator-in-javascript
-	    return "#"+((1<<24)*Math.random()|0).toString(16);
-	}
-
-
+});
 /*
-	var circle = { radius: 0 };
-	var t = Tweenkey.to( circle, 10, { radius: 20, autoStart: false, onUpdate: function(obj) {
-		//console.log(obj);
-	}} );
-
-	setTimeout(function() {
-		console.log('resuming');
-		t.resume();
-	}, 500);
-
-	setTimeout(function() {
-		console.log('pausing');
-		t.pause();
-	}, 1000);
-
-	setTimeout(function() {
-		console.log('killing');
-		t.kill();
-	}, 2000);
-
-
-	setTimeout(function() {
-		var obj = { x: 0 }
-		Tweenkey.set(obj, { x: 1, onComplete: function(o) {
-			console.log('completed:', o);
-			} 
-		});
-
-		var obj2 = { x2: 0 };
-		Tweenkey.set(obj2, { x2: 1, onComplete: function(o) {
-			console.log('completed:', o);
-			} 
-		});
-
-	}, 600);
-	*/
-
-	/*
-
-	var c = { x: 0 };
-	var t = Tweenkey.fromTo( c, 5, { x: 0 }, { x: 1, 
-		onUpdate: function(o) {
-			console.log('Update:', o);
-		},
-		onStart: function(o) {
-			console.log('Starting!');
-		},
-		onComplete: function(o) {
-			console.log('Complete!:', o);
-		},
-		autoStart: false,
-		delay: 3,
-	}).delay(3);
-	t.delay(1);
-	t.resume();
-	*/
-
+var tk = Tweenkey.ticker({
+	onTick: function() {
+		console.log('Tick!');
+	}
+});
+*/
 /*
 
-	var updates = 0;
-	var completed = 0;
-	for (var i = 0; i < 1000; i++) {
-		//console.log('creating tween');
-		var obj = {x:0};
-		Tweenkey.to(obj, Math.random() * 20 + 5, {
-			onUpdate: function() {
-				updates++;
-			},
-			onComplete: function() {
-				completed++;
-			},
-			x: Math.random() * 100 + 1,
-			ease: easeInQuad,
-			autoStart: true
-		})
-	}
 
-	setInterval(function() {
-		console.log('Updates:', updates, 'Completed:', completed);
-	}, 2000)
+
+tk.setFPS(10);
+setTimeout(function() {
+	Tweenkey.autoUpdate(false);
+	tk.pause();
+	//Tweenkey.update(0.0001);
+}, 1000);
+
+setTimeout(function() {
+	tk.resume();
+}, 5000);
+
+setTimeout(function() {
+	tk.pause();
+}, 6000);
+*/
+
+/*
+var count = 10;
+var id = setInterval(function() {
+	if (! count--) {
+		clearInterval(id);	
+	}
+	var samples = [];
+	var tweens = [];
+
+	for (var i = 1; i--; ) {
+		var tStart = window.performance.now();
+		for (var j = 1000; j--; ) {
+			//tweens.push( bound(Math.random() * 100).between(20, 80).default(1) );
+			tweens.push( Tweenkey.to({x: 0}, 1, { x:1 }) );
+		}
+		samples.push( window.performance.now() - tStart );
+	}
+	//profileEnd();
+
+	var avg = 0;
+	for (var i = samples.length; i--; ) {
+		avg += samples[i];
+	}
 	
+	
+	console.log('spawn took:', avg);
+}, 100);
 */
 
 
-	var d = { x: 0 };
-	Tweenkey.to( d, 10, { x: 1, onUpdate: function(t) { console.log(t) } } );
-
-	/*
-
-	setTimeout(function() {
-		var obj = { x: 0 };
-
-		Tweenkey.fromTo(obj, 0.3,
-			{
-				x: 1,
-				onComplete: function(o) { console.log('completed:', o); }
-			},{
-				x: 3,
-				onComplete: function(o) { console.log('completed:', o); }
-			}
-		);
-
-	}, 100);
-*/
 
 
-/*
-	for (var i = 0; i < 100; i++) {
-		var circle = { radius: 0 };
-		
-		Tweenkey.from( circle, 2, { 
-	    	radius: 30,
-	    	ease: easeInQuad,
-	    	onUpdate: function(obj) {
-	    		ctx.beginPath();
-	    		ctx.fillStyle = getRandomColor();
-	    		ctx.arc(hW + getRandomNumber(-100, 100), hH + getRandomNumber(-100, 100), obj.radius, 0, 2 * Math.PI);
-	    		ctx.fill();
-	    	}
-	    });
-	}
-	*/
-
-    
-})();
+//console.log('time:', avg / samples.length );

@@ -4,10 +4,11 @@
  *  https://github.com/radixzz/Tweenkey
  */
 
-var Tweenkey = Tweenkey || (function( wnd ) {
+var Tweenkey = Tweenkey || ( function( wnd ) {
     'use strict';
 
     var rAF, cAF;
+    var instance = {};
     var tweens = [];
     var tickers = [];
     var mainTicker;
@@ -22,6 +23,11 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     var TYPE_FNC = ({}).toString;
     var PERFORMANCE = wnd.performance;
 
+    var TWEEN_SET       = 0;
+    var TWEEN_TO        = 1;
+    var TWEEN_FROM      = 2;
+    var TWEEN_FROM_TO   = 3;
+
     // Nu[l]l
     // Gl[o]bal
     // Un[d]efined
@@ -32,12 +38,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     var S_NUM   = 'm'; // Nu[m]ber
     var S_BOOL  = 'o'; // Bo[o]lean
     var S_OBJ   = 'j'; // Ob[j]ect
-
-    // Define an array for each tween type to validate parameters
-    var TWEEN_SET       = [ S_OBJ ];
-    var TWEEN_TO        = [ S_NUM, S_OBJ ];
-    var TWEEN_FROM      = [ S_NUM, S_OBJ ];
-    var TWEEN_FROM_TO   = [ S_NUM, S_OBJ, S_OBJ ];
 
     function getTypeCheck( typeStr ) {
         var fastType = [S_FNC, S_NUM, S_BOOL].indexOf( typeStr ) > -1;
@@ -73,16 +73,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 ( overwrite || !( key in target ) ) && ( target[ key ] = source[ key ] );
             }
             return target;
-        },
-        getSignatureCheck: function( signature ) {
-            var length = signature.length;
-            return function( argumentsArray ) {
-                var res = length;
-                for (var idx = length; idx--; ) {
-                    signature[ idx ]( argumentsArray[ idx ] ) && res--;
-                }
-                return res == 0;
-            }
         },
         noop: function() { return false; }
     };
@@ -161,19 +151,17 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         this.end = this.targetProperties[ this.name ];
     }
 
-    function Tween( type, params, signatureChecker ) {
+    function Tween( type, params ) {
         
-        this._type = type;
+
         this._initted = false;
 
         var target = params.shift();
-        var validParams = signatureChecker( params );
-        var validTarget = _g.isObject( target ) || _g.isArray( target );
-
-        if ( validParams && validTarget ) {
+      
+        if ( target != null && target != undefined ) {
             initTween( this, target, params );
         } else {
-            throw "Invalid parameters";
+            throw "Invalid Target";
         }
 
         return this;
@@ -195,11 +183,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                         property.end - property.start,
                         1
                     );
-
                     updated = true;
                 } else {
                     // We remove the property entirely to avoid performance
-                    // issues due many disabled properties looping.
+                    // issues due many disabled properties loopping.
                     // Restarting the loop will bring back the removed
                     // properties by calling resetTargetProperties()
                     currentNode.properties.splice( idx, 1 );
@@ -367,7 +354,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     function pushTweenToRenderer( tween ) {
         if ( ! tween._queued ) {
-            resetTargetProperties( tween, tween._params[0], tween._params[1] );
+            resetTargetProperties( tween, tween._params[ 0 ], tween._params[ 1 ] );
+            
             tweens.push( tween );
             
             // flag to avoid pushing again to renderer
@@ -424,6 +412,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         tween._onComplete   = _g.isFunction( cfg.onComplete ) ? cfg.onComplete : _g.noop;
         tween._onRepeat     = _g.isFunction( cfg.onRepeat ) ? cfg.onRepeat : _g.noop;
         tween._params       = [ params1, params2 ];
+
     }
 
     function tweenSeek( tween, time, accountForDelay, inSeconds ) {
@@ -519,6 +508,9 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             this._running = true;
             pushTweenToRenderer( this );
             return this;
+        },
+        toString: function() {
+            return '[object Tween]';
         }
     };
 
@@ -526,7 +518,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         return function() {
             for ( var idx = tweens.length; idx--; ) {
                 var tween = tweens[ idx ];
-                tween[ funcName ].apply(tween, arguments );
+                tween[ funcName ].apply( tween, arguments );
             }
         };
     }
@@ -595,14 +587,17 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     Ticker.prototype = {
         pause: function() {
             this._running = false;
+            return this;
         },
         resume: function() {
             this._lastTime = _g.now();
             this._running = true;
             rAF( onFrame );
+            return this;
         },
         kill: function() {
             this._alive = false;
+            return this;
         },
         tick: function( time ) {
             var delta = ( time - this._lastTime ) / 1000 - this._timeBehind;
@@ -613,6 +608,8 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 this._timeBehind = delta % this._fpsStep;
                 this._onTick( m.min( delta, this._fpsStep * 2 ) );
             }
+
+            return this;
         },
         setFPS: function( fps ) {
             if ( _g.isNumber( fps ) && fps > 0 ) {
@@ -620,6 +617,10 @@ var Tweenkey = Tweenkey || (function( wnd ) {
             } else {
                 this._fpsStep = 1 / 60;
             }
+            return this;
+        },
+        toString: function() {
+            return '[object Ticker]';
         }
     }
 
@@ -640,10 +641,6 @@ var Tweenkey = Tweenkey || (function( wnd ) {
     }
 
     function newTweenFactory( type ) {        
-        var signatureChecker = _g.getSignatureCheck( 
-            type.map( function( t ) {
-                return getTypeCheck( t );
-        } ) );
 
         return function create() {
 
@@ -654,7 +651,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
                 args[ i ] = arguments[ i ];
             }
 
-            var tween = new Tween( type, args, signatureChecker );
+            var tween = new Tween( type, args );
             if ( tween._initted ) {
                 pushTweenToRenderer( tween );
             }
@@ -697,7 +694,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
 
     mainTicker = new Ticker({ onTick: updateTweens });
 
-    return {
+    return _g.extend( instance, {
         set         : newTweenFactory( TWEEN_SET ),
         to          : newTweenFactory( TWEEN_TO ),
         from        : newTweenFactory( TWEEN_FROM ),
@@ -709,7 +706,7 @@ var Tweenkey = Tweenkey || (function( wnd ) {
         update      : manualStep,
         autoUpdate  : setAutoUpdate,
         setFPS      : mainTicker.setFPS.bind( mainTicker )
-  };
+    } );
 })( window );
 
 (function( root ) {

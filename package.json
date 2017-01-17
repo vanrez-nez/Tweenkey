@@ -1,12 +1,13 @@
 {
-  "name": "Tweenkey",
-  "version": "1.0.0",
-  "description": "A modern tweening engine for Javascript.",
+  "name": "tweenkey",
+  "version": "0.0.1",
+  "description": "A compact tweening engine for Javascript.",
   "main": "src/tweenkey.js",
+  "types": "types/tweenkey.d.ts",
   "scripts": {
     "test": "mocha-phantomjs tests/test-runner.html",
     "test-style": "jscs src/tweenkey.js",
-    "build": "uglifyjs src/tweenkey.js -c -m --reserved-file=min.reserved --mangle-props -o dist/tweenkey.min.js"
+    "build": "uglifyjs src/ease.js src/tweenkey.js -c -m --reserved-file=min.reserved --mangle-props -o dist/tweenkey.min.js"
   },
   "repository": {
     "type": "git",
