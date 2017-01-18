@@ -28,40 +28,6 @@ describe( 'tweenkey', function() {
 
 	});
 
-	describe( 'Tween: constructors', function() {
-
-		var errorMessage = 'Invalid parameters';
-
-		it( 'Should validate empty params', function() {
-			tweenConstructors.forEach(function( name ) {
-				expect( Tweenkey[ name ] ).to.throw( errorMessage );
-			});
-		});
-
-		it( 'Should validate wrong target types', function() {
-
-			tweenConstructors.forEach(function( name ) {
-				[ 1, null, true, function() {}, undefined ].forEach(function( val ) {
-					expect( Tweenkey[ name ].bind(this, val ) ).to.throw( errorMessage );
-				});
-			});
-
-		});
-
-
-		it( 'Should validate additional params', function() {
-
-			tweenConstructors.forEach(function( name ) {
-				[ [], null, true, function() {}, undefined ].forEach(function( val ) {
-					expect( Tweenkey[ name ].bind( this, val ) ).to.throw( errorMessage );
-				});
-			});
-			Tweenkey.killAll();
-
-		});
-
-	});
-
 	describe( 'Tweenkey: accessors', function() {
 		it( 'killAll: should remove all active tweens', function() {
 			var tweens = [];
@@ -587,12 +553,6 @@ describe( 'tweenkey', function() {
 			expect( obj.x ).to.equal( 1 );
 		});
 
-		it( 'Should validate incorrect parameters', function() {
-			var obj = { x: 0, y: 0 };
-			var tween = Tweenkey.to( obj, 1, { x:1, y: 1, timeScale: 2 });
-			Tweenkey.update( 0.5 );
-			expect( obj.x ).to.equal( 1 );
-		});
 	});
 
 	describe( 'Tween: progress, time and restart', function() {
@@ -625,37 +585,7 @@ describe( 'tweenkey', function() {
 			t.kill();
 		})
 
-		it ('Should validate [time, restart and progress] with invalid parameters', function() {
-			var invalidParams = [-1, NaN, Infinity, undefined, {}, [], window];
-			var obj = { x: 0 };
-			var t = Tweenkey.to( obj, 10, {x: 1 });
-
-			for (var idx = invalidParams; idx--; ) {
-				var param = invalidParams[ param ];
-				Tweenkey.update( 0 );
-				expect(t.restart.bind(t, param)).to.not.throw(Error);
-				expect(t.progress.bind(t, param)).to.not.throw(Error);
-				expect(t.time.bind(t, param)).to.not.throw(Error);
-			}
-
-			// modify values of x to 0.5
-			t.restart();
-			Tweenkey.update(5);
-			expect( obj.x ).to.equal( 0.5 );
-
-			// Should take inmediate effect (no need for next frame)
-			// aka inmmediate render to set the properties
-
-			t.restart();
-			expect( obj.x ).to.equal( 0 );
-
-			// 
-			Tweenkey.update(10);
-			expect( obj.x ).to.equal( 1 );
-			t.kill();
-		});
-
-
+		
 		it ('Restart should work with delay parameter', function() {
 			Tweenkey.killAll();
 			var obj = { x: 0 };
@@ -677,10 +607,6 @@ describe( 'tweenkey', function() {
 			// Finally restart should touch x accounting for delay
 			Tweenkey.update( 2 );
 			expect( obj.x ).to.equal( 0.5 );
-		});
-
-		it ('Progress and time should work with accountForDelay parameter', function() {
-
 		});
 	})
 });

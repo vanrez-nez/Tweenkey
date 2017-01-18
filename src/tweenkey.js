@@ -39,8 +39,7 @@ var Tweenkey = Tweenkey || ( function( wnd ) {
     var S_BOOL  = 'o'; // Bo[o]lean
     var S_OBJ   = 'j'; // Ob[j]ect
 
-    function getTypeCheck( typeStr ) {
-        var fastType = [S_FNC, S_NUM, S_BOOL].indexOf( typeStr ) > -1;
+    function getTypeCheck( typeStr, fastType ) {
         return function( object ) {
             var result;
             if ( fastType ) {
@@ -54,11 +53,11 @@ var Tweenkey = Tweenkey || ( function( wnd ) {
 
     // Global object to be shared between modules
     var _g = {
-        isFunction      : getTypeCheck( S_FNC ),
-        isObject        : getTypeCheck( S_OBJ ),
-        isArray         : getTypeCheck( S_ARR ),
-        isNumber        : getTypeCheck( S_NUM ),
-        isBoolean       : getTypeCheck( S_BOOL ),
+        isFunction      : getTypeCheck( S_FNC, true ),
+        isObject        : getTypeCheck( S_OBJ, false ),
+        isArray         : getTypeCheck( S_ARR, false ),
+        isNumber        : getTypeCheck( S_NUM, true ),
+        isBoolean       : getTypeCheck( S_BOOL, true ),
         clamp: function( value, min, max ) {
             return m.min( m.max( value, min ), max );
         },
@@ -153,15 +152,13 @@ var Tweenkey = Tweenkey || ( function( wnd ) {
 
     function Tween( type, params ) {
         
-
         this._initted = false;
-
         var target = params.shift();
       
-        if ( target != null && target != undefined ) {
+        if ( typeof target == "object" ) {
             initTween( this, target, params );
         } else {
-            throw "Invalid Target";
+            throw "Invalid Tween";
         }
 
         return this;
