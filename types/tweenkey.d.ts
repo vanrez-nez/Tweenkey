@@ -43,19 +43,25 @@ declare interface ITickerParams {
 
 declare class TweenkeyTicker {
     
-    /** TODO */
+    /** Pauses the current ticker. Listener will no longer be called. */
     pause(): TweenkeyTicker;
     
-    /** TODO */
+    /** Resumes current ticker. Will have effect if tickers has not been
+      * killed.
+      */
     resume(): TweenkeyTicker;
     
-    /** TODO */
+    /** Kills the current ticker. This prevents the ticker from calling the
+     * listener again.
+    */
     kill(): TweenkeyTicker;
     
-    /** TODO */
+    /** Forces current ticker to emmit a manual tick and to advance in time
+     * for the given ammount of seconds.
+     * */
     tick( time: number ): TweenkeyTicker;
     
-    /** TODO */
+    /** Sets the ticker update frequency in the given FPS (Frame per Seconds) */
     setFPS( fps: number ): TweenkeyTicker;
     
 }

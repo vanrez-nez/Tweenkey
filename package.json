@@ -1,6 +1,6 @@
 {
   "name": "tweenkey",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "A compact tweening engine for Javascript.",
   "main": "src/tweenkey.js",
   "types": "types/tweenkey.d.ts",
