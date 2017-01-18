@@ -35,6 +35,12 @@ declare class TweenkeyTween {
     resume(): TweenkeyTween;
 }
 
+
+declare interface ITickerParams {
+    onTick: ( delta: number ) => void;
+    fps?: number;
+}
+
 declare class TweenkeyTicker {
     
     /** TODO */
@@ -69,7 +75,7 @@ declare class Tweenkey {
     static fromTo( target: any, duration: number, props: any ): TweenkeyTween;
     
     /** TODO */
-    static ticker(): TweenkeyTicker;
+    static ticker( params: ITickerParams ): TweenkeyTicker;
 
     /** TODO */
     static update( step: number ): void;
