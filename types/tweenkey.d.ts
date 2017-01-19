@@ -66,7 +66,7 @@ declare class TweenkeyTicker {
     
 }
 
-declare class Tweenkey {
+declare class TweenkeyStatic {
     
     /** TODO */
     constructor( target: any, duration: number, props: any );
@@ -101,8 +101,10 @@ declare class Tweenkey {
     /** TODO */
     static resumeAll(): void;
 
+
 }
 
+declare var Tweenkey: TweenkeyStatic;
 declare module "tweenkey" {
     export = Tweenkey;
 }
