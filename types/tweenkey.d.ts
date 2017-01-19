@@ -72,35 +72,34 @@ declare class TweenkeyStatic {
     constructor( target: any, duration: number, props: any );
     
     /** TODO */
-    static set( target: any, props: any  ): TweenkeyTween;
+    set( target: any, props: any  ): TweenkeyTween;
     
     /** TODO */
-    static to( target: any, duration: number, props: any ): TweenkeyTween;
+    to( target: any, duration: number, props: any ): TweenkeyTween;
     
     /** TODO */
-    static fromTo( target: any, duration: number, props: any ): TweenkeyTween;
+    fromTo( target: any, duration: number, props: any ): TweenkeyTween;
     
     /** TODO */
-    static ticker( params: ITickerParams ): TweenkeyTicker;
+    ticker( params: ITickerParams ): TweenkeyTicker;
 
     /** TODO */
-    static update( step: number ): void;
+    update( step: number ): void;
 
     /** TODO */
-    static autoUpdate( enabled: boolean ): void;
+    autoUpdate( enabled: boolean ): void;
 
     /** TODO */
-    static setFPS( fps: number ): void;
+    setFPS( fps: number ): void;
     
     /** TODO */
-    static killAll(): void;
+    killAll(): void;
 
     /** TODO */
-    static pauseAll(): void;
+    pauseAll(): void;
 
     /** TODO */
-    static resumeAll(): void;
-
+    resumeAll(): void;
 
 }
 
