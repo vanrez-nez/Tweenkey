@@ -4,8 +4,25 @@
  *  https://github.com/radixzz/Tweenkey
  */
 
-var Tweenkey = Tweenkey || ( function( wnd ) {
-    'use strict';
+( function ( root, factory ) {
+  if( typeof define === "function" && define.amd ) {
+    // Now we're wrapping the factory and assigning the return
+    // value to the root (window) and returning it as well to
+    // the AMD loader.
+    define( [], function(){
+      return ( root.Tweenkey = factory() );
+    });
+  } else if( typeof module === "object" && module.exports ) {
+    // I've not encountered a need for this yet, since I haven't
+    // run into a scenario where plain modules depend on CommonJS
+    // *and* I happen to be loading in a CJS browser environment
+    // but I'm including it for the sake of being thorough
+    module.exports = ( root.Tweenkey = factory() );
+  } else {
+    root.Tweenkey = factory();
+  }
+}(this, function() {
+   'use strict';
 
     var rAF, cAF;
     var instance = {};
@@ -19,7 +36,7 @@ var Tweenkey = Tweenkey || ( function( wnd ) {
     var propDictIdx = 1;
 
     var m = Math;
-
+    var wnd = Window || {};
     var TYPE_FNC = ({}).toString;
     var PERFORMANCE = wnd.performance;
 
@@ -704,21 +721,4 @@ var Tweenkey = Tweenkey || ( function( wnd ) {
         autoUpdate  : setAutoUpdate,
         setFPS      : mainTicker.setFPS.bind( mainTicker )
     } );
-})( window );
-
-(function( root ) {
-
-    if ( typeof define === 'function' && define.amd ) {
-
-        // AMD
-        define([], function() {
-            return Tweenkey;
-        });
-    } else if ( root !== undefined ) {
-
-        // Global variable
-        root.Tweenkey = Tweenkey;
-
-    }
-
-})( this );
+}));
