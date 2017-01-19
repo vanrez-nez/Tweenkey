@@ -7,7 +7,7 @@
   "scripts": {
     "test": "mocha-phantomjs tests/test-runner.html",
     "test-style": "jscs src/tweenkey.js",
-    "build": "uglifyjs src/ease.js src/tweenkey.js -c -m --reserved-file=min.reserved --mangle-props -o dist/tweenkey.min.js"
+    "build": "uglifyjs src/tweenkey.js -c -m --reserved-file=min.reserved --mangle-props -o dist/tweenkey.min.js"
   },
   "repository": {
     "type": "git",
