@@ -12,7 +12,7 @@ declare class TweenkeyTween {
     
      /** TODO */
     time( seconds: number, accountForDelay?: boolean ): TweenkeyTween;
-    
+        
     /** Forces to render the current tween properties into the target object. */
     render(): TweenkeyTween;
     

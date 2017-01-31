@@ -27,7 +27,7 @@
     var propDictIdx = 1;
 
     var m = Math;
-    var wnd = Window || {};
+    var wnd = window || {};
     var TYPE_FNC = ({}).toString;
     var PERFORMANCE = wnd.performance;
 
