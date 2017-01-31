@@ -584,7 +584,6 @@
         params = params || {};
         this._onTick = _g.isFunction( params.onTick ) ? params.onTick : _g.noop;
         this._alive = true;
-        this._timeBehind = 0;
         this.setFPS( params.fps );
         this.resume();
     }
@@ -605,22 +604,20 @@
             return this;
         },
         tick: function( time ) {
-            var delta = ( time - this._lastTime ) / 1000 - this._timeBehind;
-            this._timeBehind = m.max( this._timeBehind - this._fpsStep, 0 );
+            var delta = ( time - this._lastTime );
 
             if ( delta > this._fpsStep ) {
-                this._lastTime = time;
-                this._timeBehind = delta % this._fpsStep;
-                this._onTick( m.min( delta, this._fpsStep * 2 ) );
+                this._lastTime = time - ( delta % this._fpsStep );
+                this._onTick( m.min( delta, this._fpsStep * 2 ) / 1000 );
             }
 
             return this;
         },
         setFPS: function( fps ) {
             if ( _g.isNumber( fps ) && fps > 0 ) {
-                this._fpsStep = 1 / fps;
+                this._fpsStep = 1000 / fps;
             } else {
-                this._fpsStep = 1 / 60;
+                this._fpsStep = 1000 / 60;
             }
             return this;
         },

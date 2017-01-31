@@ -1,6 +1,6 @@
 {
   "name": "tweenkey",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "homepage": "https://github.com/radixzz/Tweenkey",
   "description": "A compact tweening engine for Javascript.",
   "main": "dist/tweenkey.min.js",
