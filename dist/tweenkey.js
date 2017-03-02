@@ -1,3 +1,28 @@
+/*
+ *  Copyright (c) 2016 Iván Juárez Núñez
+ *  This code is under MIT license
+ *  https://github.com/radixzz/Tweenkey
+ */
+
+( function ( root, factory ) {
+  console.log( root );
+  if( typeof define === "function" && define.amd ) {
+    define( [], factory );
+  } else if( typeof module === "object" && module.exports ) {
+    module.exports = ( root.Tweenkey = factory() );
+  } else {
+    root.Tweenkey = factory();
+  }
+}(this, function() {
+   'use strict';
+
+var easing = {
+    'EaseOut': function() {
+        console.log( 'easeOut!!!' );
+    }
+};
+
+easing.EaseOut();
 
 var rAF, cAF;
 var instance = new function Tweenkey(){};
@@ -681,3 +706,4 @@ return _g.extend( instance, {
     setFPS      : mainTicker.setFPS.bind( mainTicker )
 } );
 
+}));
