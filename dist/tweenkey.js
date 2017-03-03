@@ -357,7 +357,7 @@ function tweenTick( tween, dt ) {
         if ( ! tween._started ) {
             tween._started = true;
             // Fire onStart notification
-            tween._onStart();
+            tween._onStart( tween._target );
         }
 
         tween._elapsedTime += step * tween._direction;
@@ -386,7 +386,7 @@ function tweenTick( tween, dt ) {
 
         // Fire onUpdate notification only if one or more properties were updated
         if ( updatedTargets > 0 ) {
-            tween._onUpdate();
+            tween._onUpdate( tween._target );
         } else {
 
             // No updated targets means all properties where overrided
@@ -406,7 +406,7 @@ function tweenTick( tween, dt ) {
             }
 
             if ( tween._repeatLeft == 0 ) {
-                tween._onComplete();
+                tween._onComplete( tween._target );
                 tween.kill();
             } else {
                 if ( tween._yoyo ) {
@@ -415,7 +415,7 @@ function tweenTick( tween, dt ) {
                     tween._elapsedTime = 0;
                 }
                 tween._delayLeft = tween._repeatDelay;
-                tween._onRepeat();
+                tween._onRepeat( tween._target );
             }
         }
     
