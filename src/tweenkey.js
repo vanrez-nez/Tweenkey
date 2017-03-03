@@ -1,4 +1,5 @@
 
+
 var rAF, cAF;
 var instance = new function Tweenkey(){};
 var tweens = [];
@@ -11,7 +12,7 @@ var propDict = {};
 var propDictIdx = 1;
 
 var m = Math;
-var wnd = Window || {};
+var wnd = window || {};
 var TYPE_FNC = ({}).toString;
 var PERFORMANCE = wnd.performance;
 
@@ -34,14 +35,12 @@ var _g = {
     isArray         : Array.isArray || getTypeCheck( '[object Array]', false ),
     isNumber        : getTypeCheck( 'number', true ),
     isBoolean       : getTypeCheck( 'boolean', true ),
+    isString        : getTypeCheck( 'string', true ),
     clamp: function( value, min, max ) {
         return m.min( m.max( value, min ), max );
     },
     now: function() {
         return PERFORMANCE && PERFORMANCE.now && PERFORMANCE.now() || +new Date();
-    },
-    lerp: function( t, b, c, d ) {
-        return c * t / d + b;
     },
     extend: function( target, source, overwrite ) {
         for ( var key in source ) {
@@ -153,8 +152,7 @@ function updateTweenProperties( tween ) {
                 currentNode.target[ property.name ] = tween._ease(
                     tween._progress,
                     property.start,
-                    property.end - property.start,
-                    1
+                    property.end - property.start
                 );
                 updated = true;
             } else {
@@ -342,6 +340,21 @@ function pushTweenToRenderer( tween ) {
     }
 }
 
+function getEasing( val ) {
+    if ( easing[ val ] ) {
+        return easing[ val ];
+    } else if ( _g.isArray( val ) && val.length == 4 ) {
+        return wrapEasing( bezierEase.apply( this, val ) );
+    } else {
+        if ( val != undefined ) {
+            var easingNames = Object.keys( easing ).join(' | ');
+            console.warn( 'Invalid easing name: ' + val );
+            console.warn( 'Available easings: ' + easingNames );
+        }
+        return easing.linear;
+    }
+}
+
 function initTween( tween, target, params ) {
 
     var duration = params.shift();
@@ -374,12 +387,12 @@ function initTween( tween, target, params ) {
     tween._delayLeft    = delay;
     tween._repeat       = repeatCount;
     tween._repeatLeft   = repeatCount;
+    tween._ease         = getEasing( cfg.ease );
     tween._repeatDelay  = _g.isNumber( cfg.repeatDelay ) ? m.max( 0, cfg.repeatDelay ) : 0;
     tween._yoyo         = _g.isBoolean( cfg.yoyo ) ? cfg.yoyo : false;
     tween._timeScale    = _g.isNumber( cfg.timeScale ) && cfg.timeScale > 0 ? cfg.timeScale: 1;
     tween._duration     = _g.isNumber( duration ) ? m.max( 0, duration ) : 0;
     tween._running      = _g.isBoolean( cfg.autoStart ) ? cfg.autoStart : true;
-    tween._ease         = _g.isFunction( cfg.ease ) ? cfg.ease : _g.lerp;
     tween._onStart      = _g.isFunction( cfg.onStart ) ? cfg.onStart : _g.noop;
     tween._onUpdate     = _g.isFunction( cfg.onUpdate ) ? cfg.onUpdate : _g.noop;
     tween._onComplete   = _g.isFunction( cfg.onComplete ) ? cfg.onComplete : _g.noop;
@@ -513,7 +526,6 @@ function updateTweens( delta ) {
 }
 
 function onFrame() {
-
     var now = _g.now();
     var requestNextFrame = false;
 
@@ -552,7 +564,6 @@ function Ticker( params ) {
     params = params || {};
     this._onTick = _g.isFunction( params.onTick ) ? params.onTick : _g.noop;
     this._alive = true;
-    this._timeBehind = 0;
     this.setFPS( params.fps );
     this.resume();
 }
@@ -563,7 +574,7 @@ Ticker.prototype = {
         return this;
     },
     resume: function() {
-        this._lastTime = _g.now();
+        this._then = _g.now();
         this._running = true;
         rAF( onFrame );
         return this;
@@ -573,24 +584,19 @@ Ticker.prototype = {
         return this;
     },
     tick: function( time ) {
-        var delta = ( time - this._lastTime ) / 1000 - this._timeBehind;
-        this._timeBehind = m.max( this._timeBehind - this._fpsStep, 0 );
+        var delta = time - this._then;
 
         if ( delta > this._fpsStep ) {
-            this._lastTime = time;
-            this._timeBehind = delta % this._fpsStep;
-            this._onTick( m.min( delta, this._fpsStep * 2 ) );
+            var drop = delta % this._fpsStep;
+            this._then = time - drop;
+            this._onTick( ( delta - drop ) / 1000 );
         }
 
         return this;
     },
     setFPS: function( fps ) {
-        if ( _g.isNumber( fps ) && fps > 0 ) {
-            this._fpsStep = 1 / fps;
-        } else {
-            this._fpsStep = 1 / 60;
-        }
-        return this;
+        this.fps = _g.isNumber( fps ) && fps > 0 ? fps : 60;
+        this._fpsStep = 1000 / this.fps;
     },
     toString: function() {
         return '[object Ticker]';
