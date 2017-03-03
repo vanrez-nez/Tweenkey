@@ -1,8 +1,8 @@
 {
   "name": "tweenkey",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "A compact tweening engine for Javascript.",
-  "main": "src/tweenkey.js",
+  "main": "dist/tweenkey.js",
   "types": "types/tweenkey.d.ts",
   "scripts": {
     "test": "mocha-phantomjs tests/test-runner.html",
