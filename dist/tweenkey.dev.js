@@ -1,3 +1,491 @@
+/*
+ *  Copyright (c) 2016 Iván Juárez Núñez
+ *  This code is under MIT license
+ *  https://github.com/radixzz/Tweenkey
+ */
+
+( function ( root, factory ) {
+  if( typeof define === "function" && define.amd ) {
+    define( [], factory );
+  } else if( typeof module === "object" && module.exports ) {
+    module.exports = ( root.Tweenkey = factory() );
+  } else {
+    root.Tweenkey = factory();
+  }
+}(this, function() {
+   'use strict';
+
+var wnd = window || {};
+var PERFORMANCE = wnd.performance;
+var TYPE_FNC = ({}).toString;
+var m = Math;
+
+var colorRE = new RegExp(/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i);
+
+function _getTypeCheck( typeStr, fastType ) {
+    return function( obj ) {
+        return fastType ? typeof obj === typeStr:
+            TYPE_FNC.call( obj ) === typeStr;
+    };
+}
+// Global object to be shared between modules
+var _isFunction = _getTypeCheck( 'function', true );
+var _isNumber = _getTypeCheck( 'number', true );
+var _isBoolean = _getTypeCheck( 'boolean', true );
+var _isString = _getTypeCheck( 'string', true );
+var _isArray = Array.isArray || _getTypeCheck( '[object Array]', false );
+var _isColor = function( str ) {
+    return colorRE.test( str );
+}
+var _isObject = function( obj ) { 
+    return !!obj && obj.constructor === Object
+};
+
+var _flatten = function( arr ) { 
+    return [].concat.apply( [], arr );
+};
+
+var _hexStrToRGB  = function( str ) {
+    var hex = parseInt( str.slice( 1 ), 16 );
+    return [
+        (( hex >> 16 ) & 0xFF) / 255,
+        (( hex >> 8 ) & 0xFF) / 255,
+        ( hex & 0xFF ) / 255
+    ];
+};
+
+var _clamp = function( value, min, max ) {
+    return m.min( m.max( value, min ), max );
+};
+
+var _now = function() {
+    return PERFORMANCE && PERFORMANCE.now && PERFORMANCE.now() || +new Date();
+};
+var _extend = function( target, source, overwrite ) {
+    for ( var key in source ) {
+        ( overwrite || !( key in target ) ) && ( target[ key ] = source[ key ] );
+    }
+    return target;
+};
+var _noop = function() { return false; }
+
+var _minMax = function( obj, arr, key ) {
+    return obj.apply( m, arr.map( function( item ) {
+        return item[ key ];
+    } ) );
+}
+
+var _min = function( arr, key ) {
+    return _minMax( m.min, arr, key );
+}
+
+var _max = function( arr, key ) {
+    return _minMax( m.max, arr, key );
+}
+/**
+ * https://github.com/gre/bezier-easing
+ * BezierEasing - use bezier curve for transition easing function
+ * by Gaëtan Renaudeau 2014 - 2015 – MIT License
+ */
+
+var bezierEase = (function () {
+    var NEWTON_ITERATIONS = 4;
+    var NEWTON_MIN_SLOPE = 0.001;
+    var SUBDIVISION_PRECISION = 0.0000001;
+    var SUBDIVISION_MAX_ITERATIONS = 10;
+
+    var kSplineTableSize = 11;
+    var kSampleStepSize = 1.0 / (kSplineTableSize - 1.0);
+
+    var float32ArraySupported = typeof Float32Array === 'function';
+
+    function A(aA1, aA2) { return 1.0 - 3.0 * aA2 + 3.0 * aA1; }
+    function B(aA1, aA2) { return 3.0 * aA2 - 6.0 * aA1; }
+    function C(aA1) { return 3.0 * aA1; }
+
+    // Returns x(t) given t, x1, and x2, or y(t) given t, y1, and y2.
+    function calcBezier(aT, aA1, aA2) { return ((A(aA1, aA2) * aT + B(aA1, aA2)) * aT + C(aA1)) * aT; }
+
+    // Returns dx/dt given t, x1, and x2, or dy/dt given t, y1, and y2.
+    function getSlope(aT, aA1, aA2) { return 3.0 * A(aA1, aA2) * aT * aT + 2.0 * B(aA1, aA2) * aT + C(aA1); }
+
+    function binarySubdivide(aX, aA, aB, mX1, mX2) {
+        var currentX, currentT, i = 0;
+        do {
+            currentT = aA + (aB - aA) / 2.0;
+            currentX = calcBezier(currentT, mX1, mX2) - aX;
+            if (currentX > 0.0) {
+                aB = currentT;
+            } else {
+                aA = currentT;
+            }
+        } while (Math.abs(currentX) > SUBDIVISION_PRECISION && ++i < SUBDIVISION_MAX_ITERATIONS);
+        return currentT;
+    }
+
+    function newtonRaphsonIterate(aX, aGuessT, mX1, mX2) {
+        for (var i = 0; i < NEWTON_ITERATIONS; ++i) {
+            var currentSlope = getSlope(aGuessT, mX1, mX2);
+            if (currentSlope === 0.0) {
+                return aGuessT;
+            }
+            var currentX = calcBezier(aGuessT, mX1, mX2) - aX;
+            aGuessT -= currentX / currentSlope;
+        }
+        return aGuessT;
+    }
+
+    return function bezier(mX1, mY1, mX2, mY2) {
+        if (!(0 <= mX1 && mX1 <= 1 && 0 <= mX2 && mX2 <= 1)) {
+            throw new Error('bezier x values must be in [0, 1] range');
+        }
+
+        // Precompute samples table
+        var sampleValues = float32ArraySupported ? new Float32Array(kSplineTableSize) : new Array(kSplineTableSize);
+        if (mX1 !== mY1 || mX2 !== mY2) {
+            for (var i = 0; i < kSplineTableSize; ++i) {
+                sampleValues[i] = calcBezier(i * kSampleStepSize, mX1, mX2);
+            }
+        }
+
+        function getTForX(aX) {
+            var intervalStart = 0.0;
+            var currentSample = 1;
+            var lastSample = kSplineTableSize - 1;
+
+            for (; currentSample !== lastSample && sampleValues[currentSample] <= aX; ++currentSample) {
+                intervalStart += kSampleStepSize;
+            }
+            --currentSample;
+
+            // Interpolate to provide an initial guess for t
+            var dist = (aX - sampleValues[currentSample]) / (sampleValues[currentSample + 1] - sampleValues[currentSample]);
+            var guessForT = intervalStart + dist * kSampleStepSize;
+
+            var initialSlope = getSlope(guessForT, mX1, mX2);
+            if (initialSlope >= NEWTON_MIN_SLOPE) {
+                return newtonRaphsonIterate(aX, guessForT, mX1, mX2);
+            } else if (initialSlope === 0.0) {
+                return guessForT;
+            } else {
+                return binarySubdivide(aX, intervalStart, intervalStart + kSampleStepSize, mX1, mX2);
+            }
+        }
+
+        return function BezierEasing(x) {
+            if (mX1 === mY1 && mX2 === mY2) {
+                return x; // linear
+            }
+            // Because JavaScript number are imprecise, we should guarantee the extremes are right.
+            if (x === 0) {
+                return 0;
+            }
+            if (x === 1) {
+                return 1;
+            }
+            return calcBezier(getTForX(x), mY1, mY2);
+        };
+    };
+})();
+
+var easeIn  = function( power ) { 
+    return function( t ) { 
+        return m.pow( t, power )
+    }
+};
+
+var easeOut = function( power ) { 
+    return function( t ) {
+        return 1 - m.abs( m.pow( t - 1, power ) )
+    }
+};
+
+var easeInOut = function( power ) {
+    return function( t ) {
+        return t < .5 ? easeIn( power )( t * 2 ) / 2 : easeOut( power )( t * 2 - 1 ) / 2 + 0.5
+    }
+};
+
+// The following easing functions where taken from:
+// https://github.com/tweenjs/tween.js/blob/master/src/Tween.js
+
+var easeBackIn = function ( t ) {
+    var s = 1.70158;
+    return t * t * ( ( s + 1) * t - s );
+};
+
+var easeBackOut = function ( t ) {
+    var s = 1.70158;
+    return --t * t * ((s + 1) * t + s) + 1;
+};
+
+var easeBackInOut = function ( t ) {
+    var s = 1.70158 * 1.525;
+    if ((t *= 2) < 1) {
+        return 0.5 * (t * t * ((s + 1) * t - s));
+    }
+    return 0.5 * ((t -= 2) * t * ((s + 1) * t + s) + 2);
+};
+
+var easeBounceIn = function (t) {
+    return 1 - easeBounceOut(1 - t);
+};
+
+var easeBounceOut = function (t) {
+    if (t < (1 / 2.75)) {
+        return 7.5625 * t * t;
+    } else if (t < (2 / 2.75)) {
+        return 7.5625 * (t -= (1.5 / 2.75)) * t + 0.75;
+    } else if (t < (2.5 / 2.75)) {
+        return 7.5625 * (t -= (2.25 / 2.75)) * t + 0.9375;
+    } else {
+        return 7.5625 * (t -= (2.625 / 2.75)) * t + 0.984375;
+    }
+};
+
+var easeBounceInOut = function (t) {
+    return t < 0.5 ? easeBounceIn(t * 2) * 0.5 : easeBounceOut(t * 2 - 1) * 0.5 + 0.5;
+};
+
+var easeElasticIn = function (t) {
+    if (t === 0) { return 0; }
+    if (t === 1) { return 1; }
+    return -m.pow(2, 10 * (t - 1)) * m.sin((t - 1.1) * 5 * m.PI);
+};
+
+var easeElasticOut = function (t) {
+    if (t === 0) { return 0; }
+    if (t === 1) { return 1; }
+    return m.pow(2, -10 * t) * m.sin((t - 0.1) * 5 * m.PI) + 1;
+};
+
+var easeElasticInOut = function (t) {
+    if (t === 0) { return 0; }
+    if (t === 1) { return 1; }
+    t *= 2;
+    if (t < 1) {
+        return -0.5 * m.pow(2, 10 * (t - 1)) * m.sin((t - 1.1) * 5 * m.PI);
+    }
+    return 0.5 * m.pow(2, -10 * (t - 1)) * m.sin((t - 1.1) * 5 * m.PI) + 1;
+};
+
+var easeCircIn = function (t) {
+    return 1 - m.sqrt(1 - t * t);
+};
+
+var easeCircOut = function (t) {
+    return m.sqrt(1 - (--t * t));
+};
+
+var easeCircInOut = function (t) {
+    if ((t *= 2) < 1) {
+        return - 0.5 * (m.sqrt(1 - t * t) - 1);
+    }
+    return 0.5 * (m.sqrt(1 - (t -= 2) * t) + 1);
+};
+
+var easeSineIn = function (t) {
+    return 1 - m.cos(t * m.PI / 2);
+};
+
+var easeSineOut = function (t) {
+	return m.sin(t * m.PI / 2);
+};
+
+var easeSineInOut = function (t) {
+	return 0.5 * (1 - m.cos(m.PI * t));
+};
+
+var easeExpoIn = function (t) {
+	return t === 0 ? 0 : m.pow(1024, t - 1);
+};
+
+var easeExpoOut = function (t) {
+	return t === 1 ? 1 : 1 - m.pow(2, - 10 * t);
+};
+
+var easeExpoInOut = function (t) {
+    if (t === 0) return 0;
+    if (t === 1) return 1;
+    if ((t *= 2) < 1) {
+        return 0.5 * m.pow(1024, t - 1);
+    }
+    return 0.5 * (- m.pow(2, - 10 * (t - 1)) + 2);
+};
+
+var lerpColor = function( progress, hexStart, hexEnd ) {
+    
+}
+
+var wrapEasing = function( fn ) {
+    return function( progress, start, end ) {
+        return start + fn( progress ) * ( end - start );
+    }
+};
+
+var easing = {
+    'linear'    : wrapEasing( easeInOut(1) ),
+    'BackIn'    : wrapEasing( easeBackIn ),
+    'BackOut'   : wrapEasing( easeBackOut ),
+    'BackInOut' : wrapEasing( easeBackInOut ),
+    'BounceIn'  : wrapEasing( easeBounceIn ),
+    'BounceOut' : wrapEasing( easeBounceOut ),
+    'BounceInOut': wrapEasing( easeBounceInOut ),
+    'CircIn'    : wrapEasing( easeCircIn ),
+    'CircOut'   : wrapEasing( easeCircOut ),
+    'CircInOut' : wrapEasing( easeCircInOut ),
+    'CubicIn'   : wrapEasing( easeIn(3) ),
+    'CubicOut'  : wrapEasing( easeOut(3) ),
+    'CubicInOut': wrapEasing( easeInOut(3) ),
+    'ElasticIn' : wrapEasing( easeElasticIn ),
+    'ElasticOut': wrapEasing( easeElasticOut ),
+    'ElasticInOut': wrapEasing( easeElasticInOut ),
+    'ExpoIn'    : wrapEasing( easeExpoIn ),
+    'ExpoOut'   : wrapEasing( easeExpoOut ),
+    'ExpoInOut' : wrapEasing( easeExpoInOut ),
+    'QuadIn'    : wrapEasing( easeIn(2) ),
+    'QuadOut'   : wrapEasing( easeOut(2) ),
+    'QuadInOut' : wrapEasing( easeInOut(2) ),
+    'QuartIn'   : wrapEasing( easeIn(4) ),
+    'QuartOut'  : wrapEasing( easeOut(4) ),
+    'QuartInOut': wrapEasing( easeInOut(4) ),
+    'QuintIn'   : wrapEasing( easeIn(5) ),
+    'QuintOut'  : wrapEasing( easeOut(5) ),
+    'QuintInOut': wrapEasing( easeInOut(5) ),
+    'SineIn'    : wrapEasing( easeSineIn ),
+    'SineOut'   : wrapEasing( easeSineOut ),
+    'SineInOut' : wrapEasing( easeSineInOut )
+};
+
+var rAF, cAF;
+
+// borrowed from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
+(function shimAnimationFrame() {
+    var vendors, a, b, c, idx, now, dt, id;
+    var then = 0;
+
+    vendors = [ 'ms', 'moz', 'webkit', 'o' ];
+    a = 'AnimationFrame';
+    b = 'request' + a;
+    c = 'cancel' + a;
+
+    rAF = wnd[ b ];
+    cAF = wnd[ c ];
+
+    for ( var idx = vendors.lenght; !rAF && idx--; ) {
+        rAF = wnd[ vendors[ idx ] + 'Request' + a ];
+        cAF = wnd[ vendors[ idx ] + 'Cancel' + a ];
+    };
+
+    rAF = rAF || function( callback ) {
+        now = _now();
+        dt = m.max( 0, 16 - ( now - then ) );
+        id = setTimeout(function() {
+            callback( now + dt );
+        }, dt );
+        then = now + dt;
+        return id;
+    };
+
+    cAF = cAF || function( id ) {
+        clearTimeout( id );
+    };
+})();
+
+function plotTimeline( tl, label ) {
+    tl._precomputeTimeline( label );
+    var computedItems = tl._computedItems;
+    var def = Object.keys( tl._definitions );
+    var getLabel = function( obj ) {
+        for( var i = 0; i < def.length; i++ ) {
+            var key = def[ i ];
+            if ( tl._definitions[ key ] === obj ) {
+                return key;
+            }
+        }
+        return "?";
+    }
+
+    var truncText = function( text, limit ) {
+        if ( text.length > limit ) {
+            text = text.slice( 0, limit - 1 ) + '\u2026';
+        }
+        return text;
+    }
+
+    var charPad = function( size, char ) {
+        return Array.apply( null, Array( size ) )
+        .map( String.prototype.valueOf, char ).join('');
+    }
+
+    var textPad = function( size, padChar, text ) {
+        var s = m.round( ( size - text.length ) / 2 );
+        var o = size - s - text.length;
+        var left = charPad( s, padChar );
+        var right = charPad( o, padChar );
+        return left + text + right;
+    }
+
+    var logLine = function( arr ) {
+        arr.unshift( charPad( ~~( arr.length / 2 ), "%c%s" ) );
+        console.log.bind(console).apply( wnd, arr );
+    }
+
+    var bg = '';
+    var pad4 = 'padding: 4px 0;';
+    var pad3 = 'padding: 3px 0;';
+    var pad2 = 'padding: 0px 0;';
+
+    var totalDuration = _max( computedItems, 'end' );
+    var steps = m.round( totalDuration * 10 );
+    var tlStr = [];
+
+    // Print main label name and times
+    bg = 'background: #E1BEE7; padding-bottom: 6px; border-bottom: 4px solid #ba9dbf;';
+    tlStr.push( [ '', '\n\n' ] );
+    tlStr.push( [ pad4 + bg, textPad( 14, ' ', tl._startLabel ) ] );
+    tlStr.push( [ pad4, ' ' ] );
+    for( var i = 0; i < m.ceil( totalDuration ); i++ ) {
+        tlStr.push( [ pad4, i + 's' ] );
+        tlStr.push( [ pad4, charPad( 9 - i.toString().length, '\u2009' ) ] );
+    }
+
+    tlStr.push( [ '', '\n' ] );
+
+
+    // Print timeline start/end and marks line
+    bg = 'background: #C5CAE9; padding-bottom: 4px;';
+    tlStr.push( [ bg, textPad( 7, ' ', 'Start' ) ] );
+    tlStr.push( [ bg, textPad( 7, ' ', 'End' ) ] );
+
+    bg = 'background: #D1C4E9; color:#B39DDB; padding-bottom: 1px;';
+    tlStr.push( [ bg, '\u2009' ] );
+    var mark = 0;
+    for( var i = 0; i < m.ceil( totalDuration * 2 ); i++ ) {
+        tlStr.push( [ bg,  mark % 1 ? '\u25AB' : '\u25BE' ] );
+        tlStr.push( [ bg, charPad( 4, '\u2009' ) ] );
+        mark += 0.5;
+    }
+    logLine( _flatten( tlStr ) );
+
+    // Print each timeline item
+    var colors = ['E91E63', 'F44336', '9C27B0', '673AB7', '3F51B5', '2196F3' ];
+    for( var i = 0; i < computedItems.length; i++ ) {
+        var item = computedItems[ i ];
+        var sp = charPad( m.round( item.start * 10 ), '\u2219' );
+        var tSize = m.max( 2, m.round( ( item.end - item.start ) * 10 ) ) ;
+        bg = textPad( tSize, '\u2009', truncText( getLabel( item.obj ), tSize ) );
+        var c = colors[ i % colors.length ];
+        var strings = _flatten( [
+            [ "padding: 2px 0; background: #C5E1A5; color: black;", textPad( 7, ' ', item.start.toFixed( 2 ) ) ],
+            [ "padding: 2px 0; background: #FF5252; color: black;", textPad( 7, ' ', item.end.toFixed( 2 ) ) ],
+            [ "background: white; color: #802929;", "\u2009\u2009" ],
+            [ 'background: white; color: #' + c, sp ],
+            [ 'color: white; background: #' + c, bg ]
+        ]);
+        logLine( strings );
+    }
+}
 
 // TODO: add a sleep tweens layer to avoid main tweens array from getting too big
 var tweens = [];
@@ -1015,3 +1503,5 @@ return _extend( instance, {
     setFPS      : mainTicker.setFPS.bind( mainTicker )
 } );
 
+
+}));

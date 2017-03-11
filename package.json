@@ -7,11 +7,8 @@
   "scripts": {
     "test": "mocha-phantomjs tests/test-runner.html",
     "test-style": "jscs src/tweenkey.js",
-    "build:uglify": "uglifyjs dist/tweenkey.js -c -m -o dist/tweenkey.min.js",
-    "build:merge": "concat-cli -f src/intro.js src/bezier.js src/easing.js src/tweenkey.js src/outro.js -o dist/tweenkey.js",
-    "build": "npm run build:merge & npm run build:uglify",
-    "watch": "node node_modules/watch-cli/bin/watch -p \"src/*.js\" -c \"npm run build:merge\"" ,
-    "start": "concurrently \"npm run watch\" \"node node_modules/http-server/bin/http-server -c-1\" "
+    "build": "gulp build",
+    "start": "concurrently \"gulp watch\" \"node node_modules/http-server/bin/http-server -c-1\" "
   },
   "repository": {
     "type": "git",
@@ -33,13 +30,16 @@
   "homepage": "https://github.com/radixzz/Tweenkey",
   "devDependencies": {
     "chai": "^3.5.0",
-    "concat-cli": "^4.0.0",
-    "concurrently": "^3.3.0",
+    "concurrently": "^3.4.0",
+    "gulp": "^3.9.1",
+    "gulp-concat": "^2.6.1",
+    "gulp-if": "^2.0.2",
+    "gulp-rename": "^1.2.2",
+    "gulp-uglify": "^2.1.0",
     "http-server": "^0.9.0",
     "jscs": "^2.9.0",
     "mocha": "^2.4.5",
     "mocha-phantomjs": "^4.0.2",
-    "uglify-js": "^2.8.5",
-    "watch-cli": "^0.2.1"
+    "uglify-js": "^2.8.5"
   }
 }

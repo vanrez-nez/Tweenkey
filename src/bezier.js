@@ -3,6 +3,7 @@
  * BezierEasing - use bezier curve for transition easing function
  * by Gaëtan Renaudeau 2014 - 2015 – MIT License
  */
+
 var bezierEase = (function () {
     var NEWTON_ITERATIONS = 4;
     var NEWTON_MIN_SLOPE = 0.001;
