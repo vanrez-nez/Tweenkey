@@ -11,6 +11,7 @@ var filesSeq = [
     "src/easing.js",
     "src/raf.js",
     "src/plot.js",
+    "src/common.js",
     "src/tweenkey.js",
     "src/outro.js"
 ];

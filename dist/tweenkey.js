@@ -392,10 +392,123 @@ var rAF, cAF;
     };
 })();
 
+function initObjectCallbacks( obj, params ) {
+    var p = params || {};
+    obj._onStart      = _isFunction( p.onStart ) ? p.onStart : _noop;
+    obj._onUpdate     = _isFunction( p.onUpdate ) ? p.onUpdate : _noop;
+    obj._onComplete   = _isFunction( p.onComplete ) ? p.onComplete : _noop;
+    obj._onRepeat     = _isFunction( p.onRepeat ) ? p.onRepeat : _noop;
+}
+
+function initObjectRunnable( obj, params ) {
+    var p = params || {};
+    var delay = _isNumber( p.delay ) ? m.max( 0, p.delay ) : 0;
+    var repeatCount = _isNumber( p.repeat ) ? p.repeat : 0;
+
+    obj._started      = false;
+    obj._direction    = 1;
+    obj._progress     = 0;
+    obj._elapsedTime  = 0;
+    obj._alive        = true;
+    obj._delay        = delay;
+    obj._delayLeft    = delay;
+    obj._yoyo         = _isBoolean( p.yoyo ) ? p.yoyo : false;
+    // when repeat and yoyo are combined you can specify how many yoyo laps you want
+    // by default if no repeat param is set it repeats forever (-1)
+    obj._repeat       = obj._yoyo ? repeatCount > 0 ? repeatCount : -1 : repeatCount;
+    obj._repeatLeft   = obj._repeat;
+    obj._repeatDelay  = _isNumber( p.repeatDelay ) ? m.max( 0, p.repeatDelay ) : 0;
+    obj._timeScale    = _isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
+    obj._running      = _isBoolean( p.autoStart ) ? p.autoStart : true;
+    obj._params       = p;
+}
+
+/*
+ * Increments a Tween or Timeline step
+ * takes into account the current delay
+ */
+function applyStep( obj, dt ) {
+    var step = dt * obj._timeScale;
+    if ( obj._delayLeft > 0 ) {
+        // TODO: refactor this crap? should use module op
+        var delayStep = _clamp( step, 0, obj._delayLeft );
+        obj._delayLeft -= delayStep;
+        step -= delayStep;
+    }
+
+    if ( obj._delayLeft == 0 ) {
+        obj._elapsedTime += step * obj._direction;
+        obj._elapsedTime = m.max( obj._elapsedTime, 0 );
+
+        // Default progress for obj.set
+        obj._progress = 1;
+        if ( obj._duration > 0 ) {
+            obj._progress = m.round( ( obj._elapsedTime / obj._duration ) * 10000 ) / 10000;
+            obj._progress = _clamp( obj._progress, 0, 1 );
+        }
+    }
+}
+
+
+/* Updates a tween or timeline state.
+ * Handles repeats and yoyo properties.
+ * Fires onComplete or onRepeat callbacks.
+ */
+function updateState( obj ) {
+    if ( obj._delayLeft === 0 && obj._direction == 1 &&
+        obj._elapsedTime >= obj._duration ||
+        obj._direction == -1 && obj._elapsedTime == 0 ) {
+
+        if ( obj._alive ) {
+            if ( obj._repeatLeft > 0 ) {
+                obj._repeatLeft--;
+            }
+
+            if ( obj._repeatLeft == 0 ) {
+                obj._onComplete( obj._target || obj );
+                obj.kill();
+            } else {
+                if ( obj._yoyo ) {
+                    obj._direction *= -1;
+                } else {
+                    obj._elapsedTime = 0;
+                }
+                obj._delayLeft = obj._repeatDelay;
+                obj._onRepeat( obj._target || obj );
+            }
+        }
+    
+    }
+}
+
+// sets tweens and timelines to a certain time or progress
+function seek( obj, time, accountForDelay, inSeconds ) {
+
+    // needs to take into account repetitions!!!
+    // also if repetitions are infinite then mod current time %
+
+    var totalDuration = accountForDelay ? obj._duration + obj._delay : obj._duration;
+    time = _clamp( time, 0, inSeconds ? totalDuration : 1);
+    var timeSeconds = inSeconds ? time : time * totalDuration;
+    
+    obj._elapsedTime = timeSeconds;
+    obj._progress = timeSeconds / totalDuration;
+
+    if ( accountForDelay && timeSeconds > obj._delay ) {
+        obj._delayLeft = timeSeconds - ( timeSeconds - obj._delay );
+        obj._elapsedTime -= obj._delayLeft;
+    } else if ( ! accountForDelay )  {
+        obj._delayLeft = 0;
+    }
+    
+}
+
 // TODO: add a sleep tweens layer to avoid main tweens array from getting too big
 var tweens = [];
+var timelines = [];
 var tickers = [];
 var mainTicker;
+var sleeping = true;
 
 var PROP_NUMBER = 0;
 var PROP_ARRAY = 1;
@@ -416,6 +529,13 @@ var TL_ITEM_INVALID = 6;
 var propDict = {};
 var propDictIdx = 1;
 
+
+function awake() {
+    setTimeout( function() {
+        sleeping = false;
+        onFrame();
+    }, 1 );
+}
 /*
 * Disables only <enabled> properties of a tween and removes them from dictionary.
 * Keys param specifies an array containing which properties to disable, by default
@@ -514,54 +634,40 @@ function TweenProperty( id, name, target, origProps, targetProps ) {
     this.length = 0;
 }
 
-TweenProperty.prototype._expandArrayProperties = function( o, t ) {
-    var tp = this.target[ this.name ];
-    var len = m.max( o.length, t.length );
-    for ( var i = 0; i < len; i++ ) {
-        o[ i ] = o[ i ] != undefined ? o[ i ] : tp[ i ];
-        t[ i ] = t[ i ] != undefined ? t[ i ] : tp[ i ];
-    }
-    this.length = len;
-}
+TweenProperty.prototype = {
+    _expandArrayProperties: function( o, t ) {
+        var tp = this.target[ this.name ];
+        var len = m.max( o.length, t.length );
+        for ( var i = 0; i < len; i++ ) {
+            o[ i ] = o[ i ] != undefined ? o[ i ] : tp[ i ];
+            t[ i ] = t[ i ] != undefined ? t[ i ] : tp[ i ];
+        }
+        this.length = len;
+    },
+    refresh: function() {
+        this.start = this.origProps[ this.name ];
+        if ( this.start === undefined ) {
+            this.start = this.target[ this.name ];
+        }
+        
+        this.end = this.targetProps[ this.name ];
+        if ( this.end === undefined ) {
+            this.end = this.target[ this.name ];
+        }
 
-TweenProperty.prototype.refresh = function() {
-
-    this.start = this.origProps[ this.name ];
-    if ( this.start === undefined ) {
-        this.start = this.target[ this.name ];
+        this.type = getPropertyType(
+            this.start, this.end, this.target[ this.name ] );
+        
+        if ( this.type == PROP_ARRAY ) {
+            this._expandArrayProperties( this.start, this.end );
+        } else if ( this.type == PROP_WAYPOINTS ) {
+            this.waypoints = [ this.start ].concat( this.end );
+        } else if ( this.type == PROP_COLOR ) {
+            this.colorStart = _hexStrToRGB( this.start );
+            this.colorEnd = _hexStrToRGB( this.end );
+        }
     }
-    
-    this.end = this.targetProps[ this.name ];
-    if ( this.end === undefined ) {
-        this.end = this.target[ this.name ];
-    }
-
-    this.type = getPropertyType(
-        this.start, this.end, this.target[ this.name ] );
-    
-    if ( this.type == PROP_ARRAY ) {
-        this._expandArrayProperties( this.start, this.end );
-    } else if ( this.type == PROP_WAYPOINTS ) {
-        this.waypoints = [ this.start ].concat( this.end );
-    } else if ( this.type == PROP_COLOR ) {
-        this.colorStart = _hexStrToRGB( this.start );
-        this.colorEnd = _hexStrToRGB( this.end );
-    }
-}
-
-function Tween( params ) {
-    
-    this._initted = false;
-    var target = params.shift();
-    
-    if ( typeof target == 'object' && params.length > 0 ) {
-        initTween( this, target, params );
-    } else {
-        throw 'Invalid Tween';
-    }
-
-    return this;
-}
+};
 
 function updateTweenProperties( tween ) {
     var currentNode = tween._firstNode;
@@ -636,16 +742,8 @@ function updateTweenProperties( tween ) {
 * Updates the properties of a given tween
 */
 function tweenTick( tween, dt ) {
-    var step = dt * tween._timeScale;
-
-    if ( tween._delayLeft > 0 ) {
-        var delayStep = _clamp( step, 0, tween._delayLeft );
-        tween._delayLeft -= delayStep;
-        step -= delayStep;
-    }
 
     if ( tween._delayLeft == 0 ) {
-
         if ( tween._syncNextTick ) {
             tween._syncNextTick = false;
             // Update current properties from targets
@@ -659,27 +757,6 @@ function tweenTick( tween, dt ) {
             tween._started = true;
             // Fire onStart notification
             tween._onStart( tween._target );
-        }
-
-        tween._elapsedTime += step * tween._direction;
-        if ( tween._elapsedTime < 0 ) {
-            tween._elapsedTime = 0;
-        }
-
-        // Default progress for tween.set
-        tween._progress = 1;
-        if ( tween._duration > 0 ) {
-            
-            tween._progress = m.round( ( tween._elapsedTime / tween._duration ) * 10000 ) / 10000;
-
-            if ( tween._progress > 1 ) {
-                tween._progress = 1;
-            }
-
-            if ( tween._progress < 0 ) {
-                tween._progress = 0;
-            }
-
         }
 
         // Update tween properties with current progress
@@ -696,31 +773,8 @@ function tweenTick( tween, dt ) {
         }
     }
 
-    // Tween finished?
-    if ( tween._delayLeft === 0 && tween._direction == 1 &&
-        tween._elapsedTime >= tween._duration ||
-        tween._direction == -1 && tween._elapsedTime == 0 ) {
-
-        if ( tween._alive ) {
-            if ( tween._repeatLeft > 0 ) {
-                tween._repeatLeft--;
-            }
-
-            if ( tween._repeatLeft == 0 ) {
-                tween._onComplete( tween._target );
-                tween.kill();
-            } else {
-                if ( tween._yoyo ) {
-                    tween._direction *= -1;
-                } else {
-                    tween._elapsedTime = 0;
-                }
-                tween._delayLeft = tween._repeatDelay;
-                tween._onRepeat( tween._target );
-            }
-        }
-    
-    }
+    updateState( tween );
+    applyStep( tween, dt );    
 }
 
 /*
@@ -806,6 +860,7 @@ function pushTweenToRenderer( tween ) {
 
         // fire onStart event
         tween._started = false;
+        awake();
     }
 }
 
@@ -825,7 +880,7 @@ function getEasing( val ) {
 }
 
 function initTween( tween, target, params ) {
-
+    tween._initted = false;
     var duration = params.shift();
     var cfg = params.shift();
 
@@ -837,57 +892,27 @@ function initTween( tween, target, params ) {
         duration = 0;
     }
 
-    // Initialize tween properties
-    var delay = _isNumber( cfg.delay ) ? m.max( 0, cfg.delay ) : 0;
-    var repeatCount = _isNumber( cfg.repeat ) ? cfg.repeat : 0;
-
     tween._target       = target;
-    tween._started      = false;
     tween._queued       = false;
     tween._syncNextTick = true;
-    tween._direction    = 1;
-    tween._progress     = 0;
-    tween._elapsedTime  = 0;
-    tween._alive        = true;
-    tween._delay        = delay;
-    tween._delayLeft    = delay;
-    tween._yoyo         = _isBoolean( cfg.yoyo ) ? cfg.yoyo : false;
-    tween._repeat       = tween._yoyo ? -1 : repeatCount;
-    tween._repeatLeft   = tween._repeat;
     tween._ease         = getEasing( cfg.ease );
     tween._from         = _isObject( cfg.from ) ? cfg.from : {};
     tween._to           = _isObject( cfg.to ) ? cfg.to: {};
-    tween._repeatDelay  = _isNumber( cfg.repeatDelay ) ? m.max( 0, cfg.repeatDelay ) : 0;
-    tween._timeScale    = _isNumber( cfg.timeScale ) && cfg.timeScale > 0 ? cfg.timeScale: 1;
     tween._duration     = _isNumber( duration ) ? m.max( 0, duration ) : 0;
-    tween._running      = _isBoolean( cfg.autoStart ) ? cfg.autoStart : true;
-    tween._onStart      = _isFunction( cfg.onStart ) ? cfg.onStart : _noop;
-    tween._onUpdate     = _isFunction( cfg.onUpdate ) ? cfg.onUpdate : _noop;
-    tween._onComplete   = _isFunction( cfg.onComplete ) ? cfg.onComplete : _noop;
-    tween._onRepeat     = _isFunction( cfg.onRepeat ) ? cfg.onRepeat : _noop;
-    tween._initted      = _isBoolean( cfg.initted ) ? cfg.initted : true;
-    tween._params       = cfg;
+    tween._initted      = true;
 
+    initObjectRunnable( tween, cfg );
+    initObjectCallbacks( tween, cfg );
 }
 
-function tweenSeek( tween, time, accountForDelay, inSeconds ) {
-    
-    if ( ! _isNumber( time ) ) {
-        return false;
+function Tween( params ) {
+    var target = params.shift();
+    if ( typeof target == 'object' && params.length > 0 ) {
+        initTween( this, target, params );
+    } else {
+        throw 'Invalid Tween';
     }
-
-    var accountForDelay = _isBoolean( accountForDelay ) ? accountForDelay : false;
-    var totalDuration = accountForDelay ? tween._duration + tween._delay : tween._duration;
-    time = _clamp( time, 0, inSeconds ? totalDuration : 1);
-    var timeSeconds = inSeconds ? time : time * totalDuration;
-    
-    tween._elapsedTime = timeSeconds;
-
-    if ( accountForDelay && timeSeconds > tween._delay ) {
-        tween._delayLeft = timeSeconds - ( timeSeconds - tween._delay );
-        tween._elapsedTime -= tween._delayLeft;
-    }
-    
+    return this;
 }
 
 Tween.prototype = {
@@ -896,11 +921,11 @@ Tween.prototype = {
         return this;
     },
     progress: function( progress, accountForDelay ) {
-        tweenSeek( this, progress, accountForDelay, false );
+        seek( this, progress, accountForDelay, false );
         return this;
     },
     time: function( seconds, accountForDelay ) {
-        tweenSeek( this, seconds, accountForDelay, true );
+        seek( this, seconds, accountForDelay, true );
         return this;
     },
     render: function() {
@@ -1031,7 +1056,11 @@ function onFrame() {
         }
     }
 
-    if ( requestNextFrame ) {
+    if ( tweens.length === 0 && tickers.length === 0 ) {
+        sleeping = true;
+    }
+
+    if ( requestNextFrame && !sleeping ) {
         rAF( onFrame );
     }
 }
@@ -1039,6 +1068,7 @@ function onFrame() {
 function newTicker( params ) {
     var ticker = new Ticker( params );
     tickers.push(ticker);
+    awake();
     return ticker;
 }
 
@@ -1281,23 +1311,64 @@ function computeTimeLineItems( items, startLabel, offset ) {
     return result;
 }
 
+function initTimeline( tl, params ) {
+    tl._initted = false;
+    initObjectCallbacks( tl, params );
+    initObjectRunnable( tl, params );
+    tl._initted = true;
+}
+
 function Timeline ( params ) {
-    params = params || {};
-    this.timeScale( params.timeScale );
-    this.delay( params.delay );
-    this.yoyo( params.yoyo );
-    this._direction = 1;
+    initTimeline( this, params );
     this._definitions = {};
-    this._elapsedTime = 0;
     this._computedItems = [];
     this._startLabel = '';
     this._ticker = newTicker({
         onTick: this.tick.bind( this )
     });
-    this._ticker.pause();
+
+    if ( ! this._autoStart ) {
+        this._ticker.pause();
+    }
+}
+
+function timelineTick( tl, dt ) {
+    if ( tl._delayLeft === 0 ) {
+
+        if ( ! tl._started ) {
+            tl._started = true;
+            tl._onStart( tl );
+        }
+
+        for( var i = 0; i < tl._computedItems.length; i++ ) {
+            var item = tl._computedItems[ i ];
+            if ( tl._direction == 1 && tl._elapsedTime >= item.start ||
+                 tl._direction == -1 && tl._elapsedTime <= item.end ) {
+                if ( item.type == TL_ITEM_TWEEN ) {
+                    seek( item.obj, tl._elapsedTime - item.start, true, true );
+                    tweenTick( item.obj, 0 );
+                }
+
+                if ( item.type == TL_ITEM_CALLBACK ) {
+                    item.obj.apply( tl );
+                }
+            }
+        }
+    }
+    updateState( tl );
+    applyStep( tl, dt );
 }
 
 Timeline.prototype = {
+    _precompute: function( label ) {
+        if ( this._needsRecompute ) {
+            label = label || this._startLabel;
+            var items = computeTimeLineItems( this._definitions, label );
+            this._computedItems = absShiftTimeLineItems( items );
+            this._duration = getItemsDuration( this._computedItems );
+            this._needsRecompute = false;
+        }
+    },
     let: function( label, obj ) {
         var type = getDefinitionType( obj );
         if ( _isString( label ) && type != TL_ITEM_INVALID ) {
@@ -1315,56 +1386,50 @@ Timeline.prototype = {
             this._definitions[ label ] = obj;
             this._needsRecompute = true;
         }
+        return this;
     },
     tick: function( dt ) {
-        this._precomputeTimeline();
-        this._elapsedTime += ( dt * this._timeScale ) * direction;
-        
-        for( var i = 0; i < this._computedItems.length; i++ ) {
-            var item = this._computedItems[ i ];
-            if ( direction == 1 && this._elapsedTime >= item.start ||
-                 direction == -1 && this._elapsedTime <= item.end ) {
-                if ( item.type == TL_ITEM_TWEEN ) {
-                    item.obj._elapsedTime = this._elapsedTime - item.start;
-                    tweenTick( item.obj, 0 );
-                }
-
-                if ( item.type = TL_ITEM_CALLBACK ) {
-                    item.obj.apply( this );
-                }
-            }
+        this._precompute();
+        timelineTick( this, dt );
+        if ( ! this._alive ) {
+            this._ticker.kill();
         }
+        return this;
     },
     delay: function( value ) {
         this._delay = _isNumber( value ) ? value : 0;
-    },
-    _precomputeTimeline: function( label ) {
-        if ( this._needsRecompute ) {
-            label = label || this._startLabel;
-            var items = computeTimeLineItems( this._definitions, label );
-            this._computedItems = absShiftTimeLineItems( items );
-            this._duration = getItemsDuration( this._computedItems );
-            this._needsRecompute = false;
-        }
+        return this;
     },
     plot: function( label ) {
         if ( typeof plotTimeline !== 'undefined' )
             plotTimeline( this, label );
+        return this;
     },
     reverse: function() {
-        this._direction *= -1; 
+        this._direction *= -1;
+        return this;
     },
     yoyo: function( value ) {
         this._yoyo = _isBoolean( value ) ? value: false;
+        return this;
     },
     duration: function() {
-        this._precomputeTimeline();
+        this._precompute();
         return this._duration;
     },
     timeScale: function( value ) {
         this._timeScale = _isNumber( value ) ? m.max( 0, value ) : 1;
     },
-    seek: function() {
+    seek: function( seconds, accountForDelay ) {
+        this._precompute();
+        seek( this, seconds, accountForDelay, true );
+        this.tick( 0 );
+        return this;
+    },
+    progress: function( value, accountForDelay ) {
+        this._precompute();
+        seek( this, value, accountForDelay, false );
+        this.tick( 0 );
         return this;
     },
     pause: function() {
@@ -1375,7 +1440,12 @@ Timeline.prototype = {
         this._ticker.resume();
         return this;
     },
+    restart: function( accountForDelay ) {
+        this._delayLeft = accountForDelay ? this._delay : 0;
+        return this;
+    },
     play: function( label ) {
+        // TODO: validate label?
         this._startLabel = label;
         this._ticker.resume();
         return this;

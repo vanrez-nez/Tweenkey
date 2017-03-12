@@ -11,7 +11,7 @@
 		var pos = { x: 30, y: yStart }
 		return Tweenkey.tween( pos, 1, {
 			to: { x: xTarget },
-			ease: 'QuadInOut',
+			ease: 'BackInOut',
 			onUpdate: function() {
 				var s = 'opacity: 1;';
 				s += 'transform: matrix( 1, 0, 0, 1,' +  pos.x + ',' + pos.y + ');';
@@ -20,7 +20,16 @@
 		} );
 	}
 
-	var tl = Tweenkey.timeline( { timeScale: 1 } );
+	var tl = Tweenkey.timeline( {
+		timeScale: 0.5,
+		delay: 1,
+		yoyo: true,
+		repeat: 3,
+		autoStart: false,
+		onComplete: function() { console.log( 'TL Complete!' ) },
+		onStart: function() { console.log( 'TL Start!' ) },
+		onRepeat: function() { console.log( 'Repeat!' ) }
+	} );
 	
 	tl.let( 't1', getTweenCircle( 'circle c0', 'T1', 200, 0 ) );
 	tl.let( 't2', getTweenCircle( 'circle c1', 'T2', 200, 60 ) );
@@ -29,14 +38,14 @@
 	tl.let( 't4', getTweenCircle( 'circle c3', 'T4', 200, 180 ) );
 	tl.let( 't5', getTweenCircle( 'circle c4', 'T5', 200, 240 ) );
 	tl.let( 't6', getTweenCircle( 'circle c5', 'T6', 200, 300 ) );
-	tl.let( 'cb', function() { console.log( 'orray!' ) } );
-	tl.let( 's1', [ { 't1': 0, 't2': 0.2 } ] );
+	tl.let( 'cb', function() {  } );
+	tl.let( 's1', [ { 't1': 0, 't2': 0.15, 't3': 0.25 } ] );
 	tl.let( 's2', [ { 't4': 0, 't5': 0.2, 't6': 0.3 } ] );
-	
-	tl.let( 'main', [ { 's1': 0 }, 'cb', { 's1': 0, 's2': 0 }, 't1', 't2' ] );
-	tl.play( 'main' );
+	tl.let( 'main', [ { 's1': 0, 's2': 0 }, 'cb' ] );
+	tl.play( 'main' ).pause();
+	tl.progress( 0.7 );
 	tl.plot( 'main' );
-});
+})();
 
 (function() {
 	var tl = new TimelineMax();
@@ -160,4 +169,4 @@
 
 	allocCircles( 1000 );
 	bindEvents();
-})();
+});

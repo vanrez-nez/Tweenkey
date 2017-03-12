@@ -1,6 +1,6 @@
 
 function plotTimeline( tl, label ) {
-    tl._precomputeTimeline( label );
+    tl._precompute( label );
     var computedItems = tl._computedItems;
     var def = Object.keys( tl._definitions );
     var getLabel = function( obj ) {
