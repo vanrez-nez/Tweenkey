@@ -12,100 +12,135 @@ function initObjectRunnable( obj, params ) {
     var delay = _isNumber( p.delay ) ? m.max( 0, p.delay ) : 0;
     var repeatCount = _isNumber( p.repeat ) ? p.repeat : 0;
 
-    obj._started      = false;
-    obj._direction    = 1;
-    obj._progress     = 0;
-    obj._elapsedTime  = 0;
-    obj._alive        = true;
-    obj._delay        = delay;
-    obj._delayLeft    = delay;
-    obj._yoyo         = _isBoolean( p.yoyo ) ? p.yoyo : false;
-    // when repeat and yoyo are combined you can specify how many yoyo laps you want
+    obj._totalDuration  = 0;
+    obj._reversed       = _isBoolean( p.reversed ) ? p.reversed : false;
+    obj._direction      = obj._reversed ? -1 : 1;
+    obj._progress       = 0;
+    obj._totalProgress  = 0;
+    obj._elapsedTime    = 0;
+    obj._lastElapsedTime= 0;
+    obj._alive          = true;
+    obj._delay          = delay;
+    obj._delayLeft      = delay;
+    obj._yoyo           = _isBoolean( p.yoyo ) ? p.yoyo : false;
+    // when repeat and yoyo are combined you can specify how many yoyo laps you want,
     // by default if no repeat param is set it repeats forever (-1)
-    obj._repeat       = obj._yoyo ? repeatCount > 0 ? repeatCount : -1 : repeatCount;
-    obj._repeatLeft   = obj._repeat;
-    obj._repeatDelay  = _isNumber( p.repeatDelay ) ? m.max( 0, p.repeatDelay ) : 0;
-    obj._timeScale    = _isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
-    obj._running      = _isBoolean( p.autoStart ) ? p.autoStart : true;
-    obj._params       = p;
+    obj._repeat         = obj._yoyo ? ( repeatCount > 0 ? repeatCount : -1 ) : repeatCount;
+    obj._repeatLeft     = obj._repeat;
+    obj._repeatDelay    = _isNumber( p.repeatDelay ) ? m.max( 0, p.repeatDelay ) : 0;
+    obj._timeScale      = _isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
+    obj._running        = _isBoolean( p.autoStart ) ? p.autoStart : true;
+    obj._params         = p;
 }
 
 /*
  * Increments a Tween or Timeline step
- * takes into account the current delay
+ * takes into account the current timeScale
  */
 function applyStep( obj, dt ) {
     var step = dt * obj._timeScale;
+    
     if ( obj._delayLeft > 0 ) {
-        // TODO: refactor this crap? should use module op
-        var delayStep = _clamp( step, 0, obj._delayLeft );
-        obj._delayLeft -= delayStep;
-        step -= delayStep;
+        obj._delayLeft -= _roundDecimals( step );
+        if ( obj._delayLeft < 0 ) {
+            // pass the remainder as step for tweening
+            step = m.abs( obj._delayLeft );
+            obj._delayLeft = 0;
+        } else {
+            step = 0;
+        }
     }
 
-    if ( obj._delayLeft == 0 ) {
-        obj._elapsedTime += step * obj._direction;
-        obj._elapsedTime = m.max( obj._elapsedTime, 0 );
-
-        // Default progress for obj.set
-        obj._progress = 1;
-        if ( obj._duration > 0 ) {
-            obj._progress = m.round( ( obj._elapsedTime / obj._duration ) * 10000 ) / 10000;
-            obj._progress = _clamp( obj._progress, 0, 1 );
-        }
+    if ( step > 0 ) {
+        var progress = ( obj._elapsedTime + step ) / obj._totalDuration;
+        seek( obj, progress, true, false );
     }
 }
 
+function notifyStart( obj ) {
+    if ( obj._lastElapsedTime === 0 && obj._elapsedTime > 0 ) {
+        obj._onStart.call( obj._target || obj );
+    }
+}
+
+function notifyOnComplete( obj ) {
+    if ( obj._totalProgress === 1 &&
+        obj._lastElapsedTime !== obj._totalDuration ) {
+            obj._onComplete.call( obj, obj._target );
+        }
+}
+
+function notifyOnRepeat( obj ) {
+    if ( obj._elapsedTime > 0 &&
+        obj._repeat > 0 || obj._yoyo ) {
+        var d = obj._duration + obj._repeatDelay;
+        var a = obj._elapsedTime / d;
+        var b = obj._lastElapsedTime / d;
+        var repeatCount = ~b - ~a;
+        var tail = a > b ? b : a;
+        if ( repeatCount !== 0 && m.abs( tail ) < obj._repeat ) {
+            obj._onRepeat.call( obj, obj._target );
+        }
+    }
+}
 
 /* Updates a tween or timeline state.
- * Handles repeats and yoyo properties.
- * Fires onComplete or onRepeat callbacks.
- */
+*/
 function updateState( obj ) {
-    if ( obj._delayLeft === 0 && obj._direction == 1 &&
-        obj._elapsedTime >= obj._duration ||
-        obj._direction == -1 && obj._elapsedTime == 0 ) {
-
-        if ( obj._alive ) {
-            if ( obj._repeatLeft > 0 ) {
-                obj._repeatLeft--;
-            }
-
-            if ( obj._repeatLeft == 0 ) {
-                obj._onComplete( obj._target || obj );
-                obj.kill();
-            } else {
-                if ( obj._yoyo ) {
-                    obj._direction *= -1;
-                } else {
-                    obj._elapsedTime = 0;
-                }
-                obj._delayLeft = obj._repeatDelay;
-                obj._onRepeat( obj._target || obj );
-            }
-        }
-    
+    //console.log( obj._globalProgress );
+    if ( obj._totalProgress === 1 ) {
+        obj.kill();
     }
 }
 
-// sets tweens and timelines to a certain time or progress
-function seek( obj, time, accountForDelay, inSeconds ) {
 
-    // needs to take into account repetitions!!!
-    // also if repetitions are infinite then mod current time %
-
-    var totalDuration = accountForDelay ? obj._duration + obj._delay : obj._duration;
-    time = _clamp( time, 0, inSeconds ? totalDuration : 1);
-    var timeSeconds = inSeconds ? time : time * totalDuration;
+// sets tweens and timelines to a certain progress
+function seek( obj, progress, accountForRepeats, accountForDelay ) {
     
-    obj._elapsedTime = timeSeconds;
-    obj._progress = timeSeconds / totalDuration;
+    var local = obj._duration;
+    var total = obj._totalDuration;
 
-    if ( accountForDelay && timeSeconds > obj._delay ) {
-        obj._delayLeft = timeSeconds - ( timeSeconds - obj._delay );
-        obj._elapsedTime -= obj._delayLeft;
-    } else if ( ! accountForDelay )  {
-        obj._delayLeft = 0;
+    if ( accountForDelay ) {
+        // Adjust progress to take into account object's delay
+        var delay = obj._delay;
+        var delayProgress = 0;
+        if ( accountForRepeats ) {
+            // global
+            delayProgress = delay / ( delay + total );
+            progress = ( ( progress - delayProgress ) / delayProgress ) / total;
+            
+        } else {
+            // local
+            delayProgress = delay / ( delay + local );
+            progress = ( progress - delayProgress ) / delayProgress;
+        }
+        obj._delayLeft = m.max( 0, obj._delayLeft - obj._elapsedTime );
+    } else {
+        obj._delayLeft = 0;        
     }
     
+    progress = _clamp( progress, 0, 1 );    
+    progress = progress;
+
+    if ( accountForRepeats ) {
+        obj._totalProgress = progress;
+        // transform total to local
+        var localRemainder = ( total * progress ) % ( local + 0.0001 );
+        obj._progress = localRemainder / local;
+        
+    } else {
+        obj._progress = progress;
+        // transform local to total
+        obj._totalProgress = ( progress * local ) / total;
+    }
+
+    obj._lastElapsedTime = obj._elapsedTime;
+    obj._elapsedTime = total * obj._totalProgress;
+    obj._progress = obj._progress;//_roundDecimals( obj._progress );
+    obj._totalProgress = obj._totalProgress;// );
+    console.log( 
+        'local:', obj._progress,
+        'global:', obj._totalProgress,
+        'elapsed time:', obj._elapsedTime
+    );
 }

@@ -69,6 +69,10 @@ var _extend = function( target, source, overwrite ) {
 };
 var _noop = function() { return false; }
 
+var _roundDecimals = function( n ) {
+    return m.round( n * 1000 ) / 1000;
+}
+
 var _minMax = function( obj, arr, key ) {
     return obj.apply( m, arr.map( function( item ) {
         return item[ key ];
@@ -436,7 +440,7 @@ function plotTimeline( tl, label ) {
     var pad3 = 'padding: 3px 0;';
     var pad2 = 'padding: 0px 0;';
 
-    var totalDuration = _max( computedItems, 'end' );
+    var totalDuration = tl._totalDuration;
     var steps = m.round( totalDuration * 10 );
     var tlStr = [];
 
@@ -472,13 +476,13 @@ function plotTimeline( tl, label ) {
     var colors = ['E91E63', 'F44336', '9C27B0', '673AB7', '3F51B5', '2196F3' ];
     for( var i = 0; i < computedItems.length; i++ ) {
         var item = computedItems[ i ];
-        var sp = charPad( m.round( item.start * 10 ), '\u2219' );
-        var tSize = m.max( 2, m.round( ( item.end - item.start ) * 10 ) ) ;
-        bg = textPad( tSize, '\u2009', truncText( getLabel( item.obj ), tSize ) );
+        var sp = charPad( m.round( item._start * 10 ), '\u2219' );
+        var tSize = m.max( 2, m.round( ( item._end - item._start ) * 10 ) ) ;
+        bg = textPad( tSize, '\u2009', truncText( getLabel( item._obj ), tSize ) );
         var c = colors[ i % colors.length ];
         var strings = _flatten( [
-            [ "padding: 2px 0; background: #C5E1A5; color: black;", textPad( 7, ' ', item.start.toFixed( 2 ) ) ],
-            [ "padding: 2px 0; background: #FF5252; color: black;", textPad( 7, ' ', item.end.toFixed( 2 ) ) ],
+            [ "padding: 2px 0; background: #C5E1A5; color: black;", textPad( 7, ' ', item._start.toFixed( 2 ) ) ],
+            [ "padding: 2px 0; background: #FF5252; color: black;", textPad( 7, ' ', item._end.toFixed( 2 ) ) ],
             [ "background: white; color: #802929;", "\u2009\u2009" ],
             [ 'background: white; color: #' + c, sp ],
             [ 'color: white; background: #' + c, bg ]
@@ -500,102 +504,137 @@ function initObjectRunnable( obj, params ) {
     var delay = _isNumber( p.delay ) ? m.max( 0, p.delay ) : 0;
     var repeatCount = _isNumber( p.repeat ) ? p.repeat : 0;
 
-    obj._started      = false;
-    obj._direction    = 1;
-    obj._progress     = 0;
-    obj._elapsedTime  = 0;
-    obj._alive        = true;
-    obj._delay        = delay;
-    obj._delayLeft    = delay;
-    obj._yoyo         = _isBoolean( p.yoyo ) ? p.yoyo : false;
-    // when repeat and yoyo are combined you can specify how many yoyo laps you want
+    obj._totalDuration  = 0;
+    obj._reversed       = _isBoolean( p.reversed ) ? p.reversed : false;
+    obj._direction      = obj._reversed ? -1 : 1;
+    obj._progress       = 0;
+    obj._totalProgress  = 0;
+    obj._elapsedTime    = 0;
+    obj._lastElapsedTime= 0;
+    obj._alive          = true;
+    obj._delay          = delay;
+    obj._delayLeft      = delay;
+    obj._yoyo           = _isBoolean( p.yoyo ) ? p.yoyo : false;
+    // when repeat and yoyo are combined you can specify how many yoyo laps you want,
     // by default if no repeat param is set it repeats forever (-1)
-    obj._repeat       = obj._yoyo ? repeatCount > 0 ? repeatCount : -1 : repeatCount;
-    obj._repeatLeft   = obj._repeat;
-    obj._repeatDelay  = _isNumber( p.repeatDelay ) ? m.max( 0, p.repeatDelay ) : 0;
-    obj._timeScale    = _isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
-    obj._running      = _isBoolean( p.autoStart ) ? p.autoStart : true;
-    obj._params       = p;
+    obj._repeat         = obj._yoyo ? ( repeatCount > 0 ? repeatCount : -1 ) : repeatCount;
+    obj._repeatLeft     = obj._repeat;
+    obj._repeatDelay    = _isNumber( p.repeatDelay ) ? m.max( 0, p.repeatDelay ) : 0;
+    obj._timeScale      = _isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
+    obj._running        = _isBoolean( p.autoStart ) ? p.autoStart : true;
+    obj._params         = p;
 }
 
 /*
  * Increments a Tween or Timeline step
- * takes into account the current delay
+ * takes into account the current timeScale
  */
 function applyStep( obj, dt ) {
     var step = dt * obj._timeScale;
+    
     if ( obj._delayLeft > 0 ) {
-        // TODO: refactor this crap? should use module op
-        var delayStep = _clamp( step, 0, obj._delayLeft );
-        obj._delayLeft -= delayStep;
-        step -= delayStep;
+        obj._delayLeft -= _roundDecimals( step );
+        if ( obj._delayLeft < 0 ) {
+            // pass the remainder as step for tweening
+            step = m.abs( obj._delayLeft );
+            obj._delayLeft = 0;
+        } else {
+            step = 0;
+        }
     }
 
-    if ( obj._delayLeft == 0 ) {
-        obj._elapsedTime += step * obj._direction;
-        obj._elapsedTime = m.max( obj._elapsedTime, 0 );
-
-        // Default progress for obj.set
-        obj._progress = 1;
-        if ( obj._duration > 0 ) {
-            obj._progress = m.round( ( obj._elapsedTime / obj._duration ) * 10000 ) / 10000;
-            obj._progress = _clamp( obj._progress, 0, 1 );
-        }
+    if ( step > 0 ) {
+        var progress = ( obj._elapsedTime + step ) / obj._totalDuration;
+        seek( obj, progress, true, false );
     }
 }
 
+function notifyStart( obj ) {
+    if ( obj._lastElapsedTime === 0 && obj._elapsedTime > 0 ) {
+        obj._onStart.call( obj._target || obj );
+    }
+}
+
+function notifyOnComplete( obj ) {
+    if ( obj._totalProgress === 1 &&
+        obj._lastElapsedTime !== obj._totalDuration ) {
+            obj._onComplete.call( obj, obj._target );
+        }
+}
+
+function notifyOnRepeat( obj ) {
+    if ( obj._elapsedTime > 0 &&
+        obj._repeat > 0 || obj._yoyo ) {
+        var d = obj._duration + obj._repeatDelay;
+        var a = obj._elapsedTime / d;
+        var b = obj._lastElapsedTime / d;
+        var repeatCount = ~b - ~a;
+        var tail = a > b ? b : a;
+        if ( repeatCount !== 0 && m.abs( tail ) < obj._repeat ) {
+            obj._onRepeat.call( obj, obj._target );
+        }
+    }
+}
 
 /* Updates a tween or timeline state.
- * Handles repeats and yoyo properties.
- * Fires onComplete or onRepeat callbacks.
- */
+*/
 function updateState( obj ) {
-    if ( obj._delayLeft === 0 && obj._direction == 1 &&
-        obj._elapsedTime >= obj._duration ||
-        obj._direction == -1 && obj._elapsedTime == 0 ) {
-
-        if ( obj._alive ) {
-            if ( obj._repeatLeft > 0 ) {
-                obj._repeatLeft--;
-            }
-
-            if ( obj._repeatLeft == 0 ) {
-                obj._onComplete( obj._target || obj );
-                obj.kill();
-            } else {
-                if ( obj._yoyo ) {
-                    obj._direction *= -1;
-                } else {
-                    obj._elapsedTime = 0;
-                }
-                obj._delayLeft = obj._repeatDelay;
-                obj._onRepeat( obj._target || obj );
-            }
-        }
-    
+    //console.log( obj._globalProgress );
+    if ( obj._totalProgress === 1 ) {
+        obj.kill();
     }
 }
 
-// sets tweens and timelines to a certain time or progress
-function seek( obj, time, accountForDelay, inSeconds ) {
 
-    // needs to take into account repetitions!!!
-    // also if repetitions are infinite then mod current time %
-
-    var totalDuration = accountForDelay ? obj._duration + obj._delay : obj._duration;
-    time = _clamp( time, 0, inSeconds ? totalDuration : 1);
-    var timeSeconds = inSeconds ? time : time * totalDuration;
+// sets tweens and timelines to a certain progress
+function seek( obj, progress, accountForRepeats, accountForDelay ) {
     
-    obj._elapsedTime = timeSeconds;
-    obj._progress = timeSeconds / totalDuration;
+    var local = obj._duration;
+    var total = obj._totalDuration;
 
-    if ( accountForDelay && timeSeconds > obj._delay ) {
-        obj._delayLeft = timeSeconds - ( timeSeconds - obj._delay );
-        obj._elapsedTime -= obj._delayLeft;
-    } else if ( ! accountForDelay )  {
-        obj._delayLeft = 0;
+    if ( accountForDelay ) {
+        // Adjust progress to take into account object's delay
+        var delay = obj._delay;
+        var delayProgress = 0;
+        if ( accountForRepeats ) {
+            // global
+            delayProgress = delay / ( delay + total );
+            progress = ( ( progress - delayProgress ) / delayProgress ) / total;
+            
+        } else {
+            // local
+            delayProgress = delay / ( delay + local );
+            progress = ( progress - delayProgress ) / delayProgress;
+        }
+        obj._delayLeft = m.max( 0, obj._delayLeft - obj._elapsedTime );
+    } else {
+        obj._delayLeft = 0;        
     }
     
+    progress = _clamp( progress, 0, 1 );    
+    progress = progress;
+
+    if ( accountForRepeats ) {
+        obj._totalProgress = progress;
+        // transform total to local
+        var localRemainder = ( total * progress ) % ( local + 0.0001 );
+        obj._progress = localRemainder / local;
+        
+    } else {
+        obj._progress = progress;
+        // transform local to total
+        obj._totalProgress = ( progress * local ) / total;
+    }
+
+    obj._lastElapsedTime = obj._elapsedTime;
+    obj._elapsedTime = total * obj._totalProgress;
+    obj._progress = obj._progress;//_roundDecimals( obj._progress );
+    obj._totalProgress = obj._totalProgress;// );
+    console.log( 
+        'local:', obj._progress,
+        'global:', obj._totalProgress,
+        'elapsed time:', obj._elapsedTime
+    );
 }
 
 // TODO: add a sleep tweens layer to avoid main tweens array from getting too big
@@ -764,11 +803,28 @@ TweenProperty.prototype = {
     }
 };
 
+function getLocalProgress( obj ) {
+    if ( obj._yoyo && obj._elapsedTime > 0 ) {
+        
+        // when yoyo is active we need to invert
+        // the progress on each odd lap
+        var local = obj._duration;
+        var total = obj._totalDuration;
+
+        var lapOdd = m.ceil( ( total * obj._totalProgress ) / local ) % 2 === 0;
+        return lapOdd ? 1 - obj._progress : obj._progress;
+    } else {
+        return obj._progress;
+    }
+}
+
 function updateTweenProperties( tween ) {
     var currentNode = tween._firstNode;
     var updatedTargets = 0;
 
     do {
+        var progress = getLocalProgress( tween );
+        //console.log( 'progress:', tween._progress );
         var updated = false;
         for ( var idx = currentNode.properties.length; idx--; ) {
             var p = currentNode.properties[ idx ];
@@ -782,7 +838,7 @@ function updateTweenProperties( tween ) {
                             var end = p.end[ j ] - start;
                             
                             arr[ j ] = tween._ease(
-                                tween._progress,
+                                progress,
                                 start,
                                 end
                             );
@@ -790,14 +846,14 @@ function updateTweenProperties( tween ) {
                         break;
                     case PROP_NUMBER:
                         currentNode.target[ p.name ] = tween._ease(
-                            tween._progress,
+                            progress,
                             p.start,
                             p.end
                         );
                         break;
                     case PROP_WAYPOINTS:
                         var len = p.waypoints.length - 1;
-                        var a = len *  tween._progress;
+                        var a = len *  progress;
                         var b = m.floor( a );
                         var val = tween._ease(
                             a - b,
@@ -807,10 +863,9 @@ function updateTweenProperties( tween ) {
                         currentNode.target[ p.name ] = val;
                         break;
                     case PROP_COLOR:
-                        var prog = tween._progress;
-                        var r = tween._ease( prog, p.colorStart[ 0 ], p.colorEnd[ 0 ] );
-                        var g = tween._ease( prog, p.colorStart[ 1 ], p.colorEnd[ 1 ] );
-                        var b = tween._ease( prog, p.colorStart[ 2 ], p.colorEnd[ 2 ] );
+                        var r = tween._ease( progress, p.colorStart[ 0 ], p.colorEnd[ 0 ] );
+                        var g = tween._ease( progress, p.colorStart[ 1 ], p.colorEnd[ 1 ] );
+                        var b = tween._ease( progress, p.colorStart[ 2 ], p.colorEnd[ 2 ] );
                         var hex = ( ( r * 255 ) << 16 ) + ( ( g * 255) << 8 ) + ( b * 255 | 0 );
                         currentNode.target[ p.name ] = '#' + hex.toString( 16 );
                         break;
@@ -837,8 +892,8 @@ function updateTweenProperties( tween ) {
 * Updates the properties of a given tween
 */
 function tweenTick( tween, dt ) {
-
-    if ( tween._delayLeft == 0 ) {
+    notifyStart( tween );
+    if ( tween._elapsedTime > 0 ) {
         if ( tween._syncNextTick ) {
             tween._syncNextTick = false;
             // Update current properties from targets
@@ -848,28 +903,26 @@ function tweenTick( tween, dt ) {
             overrideDictionaryProperties( tween );
         }
 
-        if ( ! tween._started ) {
-            tween._started = true;
-            // Fire onStart notification
-            tween._onStart( tween._target );
-        }
-
         // Update tween properties with current progress
         var updatedTargets = updateTweenProperties( tween );
 
         // Fire onUpdate notification only if one or more properties were updated
         if ( updatedTargets > 0 ) {
-            tween._onUpdate( tween._target );
+            tween._onUpdate.call( tween._target );
         } else {
 
             // No updated targets means all properties where overrided
             // We kill the tween early to avoid further notifications
             tween.kill();
         }
+    } else {
+        updateTweenProperties( tween );
     }
-
+    
+    notifyOnRepeat( tween );
+    notifyOnComplete( tween );
     updateState( tween );
-    applyStep( tween, dt );    
+    applyStep( tween, dt );
 }
 
 /*
@@ -953,8 +1006,6 @@ function pushTweenToRenderer( tween ) {
         // refresh all properties
         tween._syncNextTick = true;
 
-        // fire onStart event
-        tween._started = false;
         awake();
     }
 }
@@ -971,6 +1022,22 @@ function getEasing( val ) {
             console.warn( 'Available easings: ' + easingNames );
         }
         return easing.linear;
+    }
+}
+
+function setTweenDuration( tween ) {
+    var isInfinite = tween._yoyo === true && tween._repeat === -1;
+    if ( isInfinite ) {
+        // if is an infinite loop then just 
+        // take two laps as the total duration
+        tween._totalDuration = tween._duration * 2;
+    } else if ( tween._repeat > 0 ) {
+        var d = tween._duration;
+        var repeatDuration = d;
+        d += repeatDuration * tween._repeat ;
+        tween._totalDuration = d;
+    } else {
+        tween._totalDuration = tween._duration;
     }
 }
 
@@ -995,9 +1062,10 @@ function initTween( tween, target, params ) {
     tween._to           = _isObject( cfg.to ) ? cfg.to: {};
     tween._duration     = _isNumber( duration ) ? m.max( 0, duration ) : 0;
     tween._initted      = true;
-
     initObjectRunnable( tween, cfg );
     initObjectCallbacks( tween, cfg );
+    setTweenDuration( tween );
+    
 }
 
 function Tween( params ) {
@@ -1016,7 +1084,13 @@ Tween.prototype = {
         return this;
     },
     progress: function( progress, accountForDelay ) {
-        seek( this, progress, accountForDelay, false );
+        seek( this, progress, false, accountForDelay );
+        tweenTick( this, 0 );
+        return this;
+    },
+    totalProgress: function( progress, accountForDelay ) {
+        seek( this, progress, true, accountForDelay );
+        tweenTick( this, 0 );
         return this;
     },
     time: function( seconds, accountForDelay ) {
@@ -1041,7 +1115,6 @@ Tween.prototype = {
         this._delayLeft = accountForDelay ? this._delay : 0;
         this._alive = true;
         this._direction = 1;
-        this._started = false;
         this.resume();
 
         if ( immediateRender || this._delayLeft > 0 ) {
@@ -1087,15 +1160,6 @@ Tween.prototype = {
     stop: function() {
         popTweenFromRenderer( this );
         return this;
-    },
-    duration: function() {
-        var s = this._timeScale;
-        var d = this._duration / s;
-        if ( this._repeat > 1 ) {
-            var repeatTime = ( this._repeat - 1 ) * this._repeatDelay;
-            d = ( d * this._repeat ) + repeatTime / s;
-        }
-        return d + this._delay / s;
     },
     toString: function() {
         return '[object Tween]';
@@ -1297,10 +1361,11 @@ function isValidLine( labels, lineArray ) {
 }
 
 function TimelineItem( obj, type, start, end ) {
-    this.obj = obj;
-    this.type = type;
-    this.start = start;
-    this.end = end;
+    this._obj = obj;
+    this._type = type;
+    this._start = start;
+    this._end = end;
+    this._eventsEnabled = true;
 }
 
 // Get the final object of a label
@@ -1338,19 +1403,19 @@ function resolveItemLabels( items, arr ) {
 // adjust current items to start from 0
 // shifting negative offsets over all items
 function absShiftTimeLineItems( items ) {
-    var minOffset = _min( items, 'start' );
+    var minOffset = _min( items, '_start' );
     if ( minOffset < 0 ) {
         var shift = m.abs( minOffset );
         for ( var i = 0; i < items.length; i++ ) {
-            items[ i ].start += shift;
-            items[ i ].end += shift;
+            items[ i ]._start += shift;
+            items[ i ]._end += shift;
         }
     }
     return items;
 }
 
 function getItemsDuration( items ) {
-    return _max( items, 'end' ) - _min( items, 'start' );
+    return _max( items, '_end' ) - _min( items, '_start' );
 }
 
 function computeTimeLineItems( items, startLabel, offset ) {
@@ -1372,7 +1437,7 @@ function computeTimeLineItems( items, startLabel, offset ) {
             var end = offset;
             
             if ( type == TL_ITEM_TWEEN ) {
-                end = start + obj.duration();
+                end = start + obj._totalDuration;
             }
 
             if ( type == TL_ITEM_LINE_ASYNC ) {
@@ -1417,39 +1482,36 @@ function Timeline ( params ) {
     initTimeline( this, params );
     this._definitions = {};
     this._computedItems = [];
+    this._lastDirection = this._direction;
+    this._lastElapsedTime = 0;
     this._startLabel = '';
     this._ticker = newTicker({
-        onTick: this.tick.bind( this )
+        onTick: this.tick.bind( this ),
     });
-
-    if ( ! this._autoStart ) {
-        this._ticker.pause();
-    }
+    this._ticker.pause();
 }
 
 function timelineTick( tl, dt ) {
     if ( tl._delayLeft === 0 ) {
 
-        if ( ! tl._started ) {
-            tl._started = true;
-            tl._onStart( tl );
-        }
+        notifyStart( tl );
 
         for( var i = 0; i < tl._computedItems.length; i++ ) {
             var item = tl._computedItems[ i ];
-            if ( tl._direction == 1 && tl._elapsedTime >= item.start ||
-                 tl._direction == -1 && tl._elapsedTime <= item.end ) {
-                if ( item.type == TL_ITEM_TWEEN ) {
-                    seek( item.obj, tl._elapsedTime - item.start, true, true );
-                    tweenTick( item.obj, 0 );
-                }
-
-                if ( item.type == TL_ITEM_CALLBACK ) {
-                    item.obj.apply( tl );
+            if ( tl._direction == 1 && tl._elapsedTime >= item._start ||
+                 tl._direction == -1 && tl._elapsedTime <= item._end ) {
+                if ( item._type == TL_ITEM_TWEEN ) {
+                    seek( item._obj, tl._elapsedTime - item._start );
+                    tweenTick( item._obj, 0 );
+                } else if ( item._type == TL_ITEM_CALLBACK && item._eventsEnabled ) {
+                    item._obj.apply( tl )
+                    item._eventsEnabled = false;
                 }
             }
         }
     }
+    
+    notifyOnComplete( tl );
     updateState( tl );
     applyStep( tl, dt );
 }
@@ -1460,7 +1522,8 @@ Timeline.prototype = {
             label = label || this._startLabel;
             var items = computeTimeLineItems( this._definitions, label );
             this._computedItems = absShiftTimeLineItems( items );
-            this._duration = getItemsDuration( this._computedItems );
+            this._totalDuration = getItemsDuration( this._computedItems );
+            console.log( this._totalDuration );
             this._needsRecompute = false;
         }
     },
@@ -1510,7 +1573,7 @@ Timeline.prototype = {
     },
     duration: function() {
         this._precompute();
-        return this._duration;
+        return this._totalDuration;
     },
     timeScale: function( value ) {
         this._timeScale = _isNumber( value ) ? m.max( 0, value ) : 1;

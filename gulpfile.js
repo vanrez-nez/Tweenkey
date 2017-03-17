@@ -1,10 +1,11 @@
-var gulp = require( 'gulp' );
-var concat = require('gulp-concat');
-var gulpif = require( 'gulp-if' );
-var uglify = require( 'gulp-uglify' );
-var rename = require( 'gulp-rename' );
+const gulp = require( 'gulp' );
+const concat = require('gulp-concat');
+const gulpif = require( 'gulp-if' );
+const uglify = require( 'gulp-uglify' );
+const rename = require( 'gulp-rename' );
+const rimraf = require( "rimraf" );
 
-var filesSeq = [
+const filesSeq = [
     "src/intro.js",
     "src/utils.js",
     "src/bezier.js",
@@ -16,7 +17,7 @@ var filesSeq = [
     "src/outro.js"
 ];
 
-var devOnly = [
+const devOnly = [
     "src/plot.js",
 ];
 
@@ -47,7 +48,11 @@ gulp.task( 'concat', () => {
 
 } );
 
-gulp.task( 'build', [ 'concat', 'uglify' ] );
+gulp.task( 'clean', ( cb ) => {
+    rimraf('./dist', cb );
+});
+
+gulp.task( 'build', [ 'clean', 'concat', 'uglify' ] );
 
 gulp.task( 'watch', ()=> {
     let watcher = gulp.watch( [ 'src/**/*.js', 'demo/*' ], [ 'build' ] );

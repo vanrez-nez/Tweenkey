@@ -52,6 +52,10 @@ var _extend = function( target, source, overwrite ) {
 };
 var _noop = function() { return false; }
 
+var _roundDecimals = function( n ) {
+    return m.round( n * 1000 ) / 1000;
+}
+
 var _minMax = function( obj, arr, key ) {
     return obj.apply( m, arr.map( function( item ) {
         return item[ key ];

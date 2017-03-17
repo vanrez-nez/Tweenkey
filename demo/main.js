@@ -1,3 +1,50 @@
+function getCircleElement( classes ) {
+	var x = 0;
+	var y = 0;
+	var scaleX = 0;
+	var scaleY = 0;
+	var div = document.createElement( 'div' );
+	div.classList = 'circle ' + classes;
+	document.body.appendChild( div );
+	return {
+		el: div,
+		x: 0,
+		y: 0,
+		scaleX: 1,
+		scaleY: 1,
+		bgColor: '',
+		opacity: 1,
+		applyStyle: function() {
+			var s = '';
+			s += 'transform: matrix(' + this.scaleX + ', 0, 0,' + this.scaleY + ',' +  this.x + ',' + this.y + ');';
+			s += 'opacity: ' + this.opacity + ';';
+			s += this.bgColor != '' ? 'background-color:' + this.bgColor + ';' : '';
+			div.setAttribute( 'style', s );
+
+		}
+	}
+}
+
+function getInputRange( params, onChange ) {
+	params = params || {};
+	var x = params.x || 0;
+	var y = params.y || 0;
+	var width = params.width || 100;
+	var min = params.min || 0;
+	var max  = params.max || 10;
+	var input = document.createElement( 'input' );
+	input.type = "range";
+	input.min = min;
+	input.max = max;
+	input.value = 0;
+	input.setAttribute( 'style', 'width:' +
+		width + 'px;' +
+		'position: absolute;' +
+		'transform: translate(' + x + 'px,' + y + 'px)' )
+	input.oninput = onChange;
+	document.body.appendChild( input );
+}
+
 
 // TIMELINE TEST
 (function() {
@@ -12,19 +59,23 @@
 		return Tweenkey.tween( pos, 1, {
 			to: { x: xTarget },
 			ease: 'BackInOut',
+			repeat: 2,
 			onUpdate: function() {
 				var s = 'opacity: 1;';
 				s += 'transform: matrix( 1, 0, 0, 1,' +  pos.x + ',' + pos.y + ');';
 				circle.setAttribute( 'style', s );
-			}
+			},
+			onStart: function() { console.log( caption + ': onStart' ) },
+			onComplete: function() { console.log( caption + ': onComplete' ) },
+			onRepeat: function() { console.log( caption + ': onRepeat' ) }
 		} );
 	}
 
 	var tl = Tweenkey.timeline( {
-		timeScale: 0.5,
-		delay: 1,
-		yoyo: true,
-		repeat: 3,
+		//timeScale: 0.5,
+		//delay: 1,
+		//yoyo: true,
+		//repeat: 3,
 		autoStart: false,
 		onComplete: function() { console.log( 'TL Complete!' ) },
 		onStart: function() { console.log( 'TL Start!' ) },
@@ -38,32 +89,111 @@
 	tl.let( 't4', getTweenCircle( 'circle c3', 'T4', 200, 180 ) );
 	tl.let( 't5', getTweenCircle( 'circle c4', 'T5', 200, 240 ) );
 	tl.let( 't6', getTweenCircle( 'circle c5', 'T6', 200, 300 ) );
-	tl.let( 'cb', function() {  } );
+
+	tl.let( 'cb', function() { console.log('cb!') } );
 	tl.let( 's1', [ { 't1': 0, 't2': 0.15, 't3': 0.25 } ] );
 	tl.let( 's2', [ { 't4': 0, 't5': 0.2, 't6': 0.3 } ] );
-	tl.let( 'main', [ { 's1': 0, 's2': 0 }, 'cb' ] );
+	tl.let( 'main', [ { 's1': 0, 's2': 1 }, 'cb' ] );
 	tl.play( 'main' ).pause();
-	tl.progress( 0.7 );
+	tl.timeScale(1);
+	tl.resume();
+	console.log('======');
 	tl.plot( 'main' );
+
+});
+
+(function() {
+
+	var circle = getCircleElement( 'c1' );
+	circle.applyStyle();
+	Tweenkey.setFPS( 10 );
+	var t = Tweenkey.tween( circle, 10, { 
+		to: { x: 500 },
+		delay: 1,
+		repeat: 2,
+		yoyo: true,
+		//repeatDelay: 1,
+		//autoStart: false,
+		onUpdate: function() {
+			circle.applyStyle();
+			//console.log( 'update' );
+		},
+		onStart: function() {
+			console.log( 'TK start!' );
+		},
+		onComplete: function() {
+			console.log( 'TK completed!' );
+		},
+		onRepeat: function() {
+			console.log( 'TK repeat' );
+		}
+	} );
+
+	var input = getInputRange( { y: 100, width: 1400, max: 100000 }, function() {
+		//t.progress( this.value / 1000, false );
+		t.totalProgress( this.value / 100000 ).pause();
+	});
+	//t.totalProgress( 0.3 );
+	if ( ! t._running ) {
+		var x = 0;
+		setInterval( function() {
+			t.totalProgress( x );
+			x += 0.01009;
+		}, 200 );
+		
+		//t.totalProgress( 0 );
+	}
+	
+/*	t.totalProgress( 0 );	
+	t.totalProgress( 0.1 );
+	t.totalProgress( 0.2 );
+	t.totalProgress( 0.3 );
+	t.totalProgress( 0.4 );
+	t.totalProgress( 0.5 );
+	t.totalProgress( 0.6 );
+	t.totalProgress( 0.7 );
+	t.totalProgress( 0.8 );
+	t.totalProgress( 0.9 );
+	t.totalProgress( 0.999 );
+	t.totalProgress( 0 );*/
+	//t.totalProgress( 1 );
+	
 })();
 
 (function() {
-	var tl = new TimelineMax();
-	var obj = { x:1 };
-	tl.to( obj, 0.5, {x: 0} );
-	tl.addCallback( function() { console.log('callback!'); } );
-	tl.to( obj, 0.5, {x: 1} );
-	tl.pause();
-	tl.progress(0.3);
-	tl.progress(0.4);
-	tl.progress(0.6);
-	//tl.progress(0.4);
-	tl.progress(0.65);
-	tl.progress(0.7);
-	tl.progress(0.8);
-	tl.progress(0.1);
-});
+	var circle = getCircleElement( 'c1' );
+	circle.y = 140;
+	
+	circle.applyStyle();
 
+	var t = TweenMax.to( circle, 10.01, {
+		ease: Linear.easeNone,
+		x: 500,
+		delay: 1,
+		repeat: 2,
+		repeatDelay: 1,
+		//yoyo: true,
+		onRepeat: function() {
+			console.log( 'TM repeat' );			
+		},
+		onStart: function() {
+			console.log( 'TM start' );
+		},
+		onComplete: function() {
+			console.log( 'TM complete' );
+		},
+		onUpdate: function() {
+			circle.applyStyle();
+			//console.log( 'update' );
+		}
+	} );
+
+	var input = getInputRange( { y: 200, width: 300, max: 1000 }, function() {
+		//t.progress( this.value / 1000, false );
+		t.totalProgress( this.value / 1000 ).pause();
+	});
+
+});
 
 // COLOR INTERPOLATION TEST
 (function() {

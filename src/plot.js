@@ -43,7 +43,7 @@ function plotTimeline( tl, label ) {
     var pad3 = 'padding: 3px 0;';
     var pad2 = 'padding: 0px 0;';
 
-    var totalDuration = _max( computedItems, 'end' );
+    var totalDuration = tl._totalDuration;
     var steps = m.round( totalDuration * 10 );
     var tlStr = [];
 
@@ -79,13 +79,13 @@ function plotTimeline( tl, label ) {
     var colors = ['E91E63', 'F44336', '9C27B0', '673AB7', '3F51B5', '2196F3' ];
     for( var i = 0; i < computedItems.length; i++ ) {
         var item = computedItems[ i ];
-        var sp = charPad( m.round( item.start * 10 ), '\u2219' );
-        var tSize = m.max( 2, m.round( ( item.end - item.start ) * 10 ) ) ;
-        bg = textPad( tSize, '\u2009', truncText( getLabel( item.obj ), tSize ) );
+        var sp = charPad( m.round( item._start * 10 ), '\u2219' );
+        var tSize = m.max( 2, m.round( ( item._end - item._start ) * 10 ) ) ;
+        bg = textPad( tSize, '\u2009', truncText( getLabel( item._obj ), tSize ) );
         var c = colors[ i % colors.length ];
         var strings = _flatten( [
-            [ "padding: 2px 0; background: #C5E1A5; color: black;", textPad( 7, ' ', item.start.toFixed( 2 ) ) ],
-            [ "padding: 2px 0; background: #FF5252; color: black;", textPad( 7, ' ', item.end.toFixed( 2 ) ) ],
+            [ "padding: 2px 0; background: #C5E1A5; color: black;", textPad( 7, ' ', item._start.toFixed( 2 ) ) ],
+            [ "padding: 2px 0; background: #FF5252; color: black;", textPad( 7, ' ', item._end.toFixed( 2 ) ) ],
             [ "background: white; color: #802929;", "\u2009\u2009" ],
             [ 'background: white; color: #' + c, sp ],
             [ 'color: white; background: #' + c, bg ]
