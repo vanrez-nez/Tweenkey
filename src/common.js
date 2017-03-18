@@ -21,12 +21,10 @@ function initObjectRunnable( obj, params ) {
     obj._lastElapsedTime= 0;
     obj._alive          = true;
     obj._delay          = delay;
-    obj._delayLeft      = delay;
     obj._yoyo           = _isBoolean( p.yoyo ) ? p.yoyo : false;
     // when repeat and yoyo are combined you can specify how many yoyo laps you want,
     // by default if no repeat param is set it repeats forever (-1)
     obj._repeat         = obj._yoyo ? ( repeatCount > 0 ? repeatCount : -1 ) : repeatCount;
-    obj._repeatLeft     = obj._repeat;
     obj._repeatDelay    = _isNumber( p.repeatDelay ) ? m.max( 0, p.repeatDelay ) : 0;
     obj._timeScale      = _isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
     obj._running        = _isBoolean( p.autoStart ) ? p.autoStart : true;
@@ -39,22 +37,7 @@ function initObjectRunnable( obj, params ) {
  */
 function applyStep( obj, dt ) {
     var step = dt * obj._timeScale;
-    
-    if ( obj._delayLeft > 0 ) {
-        obj._delayLeft -= _roundDecimals( step );
-        if ( obj._delayLeft < 0 ) {
-            // pass the remainder as step for tweening
-            step = m.abs( obj._delayLeft );
-            obj._delayLeft = 0;
-        } else {
-            step = 0;
-        }
-    }
-
-    if ( step > 0 ) {
-        var progress = ( obj._elapsedTime + step ) / obj._totalDuration;
-        seek( obj, progress, true, false );
-    }
+    seek( obj, obj._elapsedTime + step, true, true );
 }
 
 function notifyStart( obj ) {
@@ -71,11 +54,12 @@ function notifyOnComplete( obj ) {
 }
 
 function notifyOnRepeat( obj ) {
-    if ( obj._elapsedTime > 0 &&
-        obj._repeat > 0 || obj._yoyo ) {
+    if ( obj._elapsedTime > obj._delay &&
+        ( obj._repeat > 0 || obj._yoyo ) ) {
+        var delay = obj._delay;
         var d = obj._duration + obj._repeatDelay;
-        var a = obj._elapsedTime / d;
-        var b = obj._lastElapsedTime / d;
+        var a = ( obj._elapsedTime - delay ) / d;
+        var b = ( obj._lastElapsedTime - delay ) / d;
         var repeatCount = ~b - ~a;
         var tail = a > b ? b : a;
         if ( repeatCount !== 0 && m.abs( tail ) < obj._repeat ) {
@@ -93,51 +77,46 @@ function updateState( obj ) {
     }
 }
 
+function seekProgress( obj, progress, global, accountForDelay ) {
+    progress = _clamp( progress, 0, 1 );
+    var delayJump = accountForDelay ? 0 : obj._delay;
+    var duration = 0;
+    if ( global ) {
+        duration = obj._totalDuration;
+    } else {
+        duration = obj._duration + obj._repeatDelay;
+        // Normalize the duration to treat following calcs
+        // with the same delay jump.
+        duration += obj._delay;
+    }
+    
+    var time = progress * ( duration - delayJump ) ;
+    seek( obj, time + delayJump, global );
+}
 
 // sets tweens and timelines to a certain progress
-function seek( obj, progress, accountForRepeats, accountForDelay ) {
-    
-    var local = obj._duration;
-    var total = obj._totalDuration;
-
-    if ( accountForDelay ) {
-        // Adjust progress to take into account object's delay
-        var delay = obj._delay;
-        var delayProgress = 0;
-        if ( accountForRepeats ) {
-            // global
-            delayProgress = delay / ( delay + total );
-            progress = ( ( progress - delayProgress ) / delayProgress ) / total;
-            
-        } else {
-            // local
-            delayProgress = delay / ( delay + local );
-            progress = ( progress - delayProgress ) / delayProgress;
-        }
-        obj._delayLeft = m.max( 0, obj._delayLeft - obj._elapsedTime );
-    } else {
-        obj._delayLeft = 0;        
-    }
-    
-    progress = _clamp( progress, 0, 1 );    
-    progress = progress;
-
-    if ( accountForRepeats ) {
-        obj._totalProgress = progress;
-        // transform total to local
-        var localRemainder = ( total * progress ) % ( local + 0.0001 );
-        obj._progress = localRemainder / local;
-        
-    } else {
-        obj._progress = progress;
-        // transform local to total
-        obj._totalProgress = ( progress * local ) / total;
-    }
-
+function seek( obj, time, accountForRepeats ) {
+    time = _clamp( time, 0, obj._totalDuration );
     obj._lastElapsedTime = obj._elapsedTime;
-    obj._elapsedTime = total * obj._totalProgress;
-    obj._progress = obj._progress;//_roundDecimals( obj._progress );
-    obj._totalProgress = obj._totalProgress;// );
+    obj._elapsedTime = time;
+    obj._totalProgress = time / obj._totalDuration;
+
+    if ( time > obj._delay ) {
+        if ( accountForRepeats ) {
+            var loc = obj._duration + 0.00001;
+            var elapsed = time - obj._delay;
+            elapsed = elapsed % ( loc + obj._repeatDelay );
+            if ( elapsed <= loc ) {
+                obj._progress = _roundDecimals( ( elapsed % loc ) / loc );
+            } else {
+                obj._progress = 1;
+            }
+        } else {
+            obj._progress = ( time - obj._delay ) / obj._duration;
+        }
+    } else {
+        obj._progress = 0;
+    }
     console.log( 
         'local:', obj._progress,
         'global:', obj._totalProgress,

@@ -166,14 +166,12 @@ TweenProperty.prototype = {
 };
 
 function getLocalProgress( obj ) {
-    if ( obj._yoyo && obj._elapsedTime > 0 ) {
-        
+    if ( obj._yoyo && obj._elapsedTime > obj._duration ) {
         // when yoyo is active we need to invert
         // the progress on each odd lap
-        var local = obj._duration;
-        var total = obj._totalDuration;
-
-        var lapOdd = m.ceil( ( total * obj._totalProgress ) / local ) % 2 === 0;
+        var local = obj._duration + obj._repeatDelay + 0.0001;
+        var elapsed = m.max( 0, obj._elapsedTime - obj._delay );
+        var lapOdd = m.ceil( elapsed / local ) % 2 === 0;
         return lapOdd ? 1 - obj._progress : obj._progress;
     } else {
         return obj._progress;
@@ -186,7 +184,7 @@ function updateTweenProperties( tween ) {
 
     do {
         var progress = getLocalProgress( tween );
-        //console.log( 'progress:', tween._progress );
+        
         var updated = false;
         for ( var idx = currentNode.properties.length; idx--; ) {
             var p = currentNode.properties[ idx ];
@@ -395,11 +393,10 @@ function setTweenDuration( tween ) {
         tween._totalDuration = tween._duration * 2;
     } else if ( tween._repeat > 0 ) {
         var d = tween._duration;
-        var repeatDuration = d;
-        d += repeatDuration * tween._repeat ;
-        tween._totalDuration = d;
+        var repeatDuration = ( d + tween._repeatDelay ) * tween._repeat;
+        tween._totalDuration = d + repeatDuration + tween._delay;
     } else {
-        tween._totalDuration = tween._duration;
+        tween._totalDuration = tween._duration + tween._delay;
     }
 }
 
@@ -446,12 +443,12 @@ Tween.prototype = {
         return this;
     },
     progress: function( progress, accountForDelay ) {
-        seek( this, progress, false, accountForDelay );
+        seekProgress( this, progress, false, accountForDelay );
         tweenTick( this, 0 );
         return this;
     },
     totalProgress: function( progress, accountForDelay ) {
-        seek( this, progress, true, accountForDelay );
+        seekProgress( this, progress, true, accountForDelay );
         tweenTick( this, 0 );
         return this;
     },
