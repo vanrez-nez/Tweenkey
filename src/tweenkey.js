@@ -27,10 +27,12 @@ var propDictIdx = 1;
 
 
 function awake() {
-    setTimeout( function() {
-        sleeping = false;
-        onFrame();
-    }, 1 );
+    if ( sleeping == true ) {
+        setTimeout( function() {
+            sleeping = false;
+            onFrame();
+        }, 1 );
+    }
 }
 /*
 * Disables only <enabled> properties of a tween and removes them from dictionary.
@@ -166,10 +168,10 @@ TweenProperty.prototype = {
 };
 
 function getLocalProgress( obj ) {
-    if ( obj._yoyo && obj._elapsedTime > obj._duration ) {
+    if ( obj._yoyo && obj._elapsedTime > obj._duration + obj._delay ) {
         // when yoyo is active we need to invert
         // the progress on each odd lap
-        var local = obj._duration + obj._repeatDelay + 0.0001;
+        var local = obj._duration + obj._repeatDelay + DEC_FIX;
         var elapsed = m.max( 0, obj._elapsedTime - obj._delay );
         var lapOdd = m.ceil( elapsed / local ) % 2 === 0;
         return lapOdd ? 1 - obj._progress : obj._progress;
@@ -268,7 +270,7 @@ function tweenTick( tween, dt ) {
 
         // Fire onUpdate notification only if one or more properties were updated
         if ( updatedTargets > 0 ) {
-            tween._onUpdate.call( tween._target );
+            tween._onUpdate.call( tween, tween._target );
         } else {
 
             // No updated targets means all properties where overrided
@@ -291,7 +293,7 @@ function tweenTick( tween, dt ) {
 */
 function resetTargetProperties( tween, targetProperties, originProperties ) {
 
-    var targets =  _isArray( tween._target ) ? tween._target : [ tween._target ];
+    var targets = _isArray( tween._target ) ? tween._target : [ tween._target ];
     var prevNode, firstNode;
 
     // merge keys of targetProperties and originProperties without duplicates
@@ -386,18 +388,27 @@ function getEasing( val ) {
 }
 
 function setTweenDuration( tween ) {
-    var isInfinite = tween._yoyo === true && tween._repeat === -1;
-    if ( isInfinite ) {
+    
+    var total = 0;
+    var tweenDuration = tween._duration;
+    var repeatDelay = tween._repeatDelay;
+    var delay = tween._delay;
+    
+    
+    if ( tween._infinite ) {
+        
         // if is an infinite loop then just 
         // take two laps as the total duration
-        tween._totalDuration = tween._duration * 2;
+        total = tween._duration * 2;
+        total += delay + repeatDelay * 2;
     } else if ( tween._repeat > 0 ) {
-        var d = tween._duration;
-        var repeatDuration = ( d + tween._repeatDelay ) * tween._repeat;
-        tween._totalDuration = d + repeatDuration + tween._delay;
+        var repeatDuration = ( tweenDuration + repeatDelay ) * tween._repeat;
+        total = tweenDuration + repeatDuration + delay;
     } else {
-        tween._totalDuration = tween._duration + tween._delay;
+        total = tweenDuration + delay;
     }
+
+    tween._totalDuration = total;
 }
 
 function initTween( tween, target, params ) {
@@ -424,7 +435,6 @@ function initTween( tween, target, params ) {
     initObjectRunnable( tween, cfg );
     initObjectCallbacks( tween, cfg );
     setTweenDuration( tween );
-    
 }
 
 function Tween( params ) {
@@ -504,6 +514,7 @@ Tween.prototype = {
         } else {
             this._alive = false;
             this._running = false;
+            this._firstNode = undefined;
         }
         return this;
     },
@@ -619,7 +630,7 @@ Ticker.prototype = {
         if ( delta > this._fpsStep ) {
             var drop = delta % this._fpsStep;
             this._then = time - drop;
-            this._onTick( m.min( delta - drop, this._fpsStep * 2 ) / 1000 );
+            this._onTick( m.min( delta - drop, this._fpsStep * 4 ) / 1000 );
         }
 
         return this;

@@ -22,9 +22,14 @@ function initObjectRunnable( obj, params ) {
     obj._alive          = true;
     obj._delay          = delay;
     obj._yoyo           = _isBoolean( p.yoyo ) ? p.yoyo : false;
+    
     // when repeat and yoyo are combined you can specify how many yoyo laps you want,
     // by default if no repeat param is set it repeats forever (-1)
-    obj._repeat         = obj._yoyo ? ( repeatCount > 0 ? repeatCount : -1 ) : repeatCount;
+    if ( _isNumber( p.repeat ) === false && obj._yoyo ) {
+        repeatCount = -1;
+    }
+    obj._repeat         = repeatCount;
+    obj._infinite       = obj._yoyo === true || obj._repeat === -1;
     obj._repeatDelay    = _isNumber( p.repeatDelay ) ? m.max( 0, p.repeatDelay ) : 0;
     obj._timeScale      = _isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
     obj._running        = _isBoolean( p.autoStart ) ? p.autoStart : true;
@@ -36,8 +41,11 @@ function initObjectRunnable( obj, params ) {
  * takes into account the current timeScale
  */
 function applyStep( obj, dt ) {
-    var step = dt * obj._timeScale;
-    seek( obj, obj._elapsedTime + step, true, true );
+    var time = obj._elapsedTime + dt * obj._timeScale;
+    if ( obj._infinite && time > obj._totalDuration) {
+        time = obj._delay;
+    }
+    seek( obj, time, true, true );
 }
 
 function notifyStart( obj ) {
@@ -47,7 +55,7 @@ function notifyStart( obj ) {
 }
 
 function notifyOnComplete( obj ) {
-    if ( obj._totalProgress === 1 &&
+    if ( ! obj._infinite && obj._totalProgress === 1 &&
         obj._lastElapsedTime !== obj._totalDuration ) {
             obj._onComplete.call( obj, obj._target );
         }
@@ -62,7 +70,7 @@ function notifyOnRepeat( obj ) {
         var b = ( obj._lastElapsedTime - delay ) / d;
         var repeatCount = ~b - ~a;
         var tail = a > b ? b : a;
-        if ( repeatCount !== 0 && m.abs( tail ) < obj._repeat ) {
+        if ( repeatCount !== 0 && ( obj._infinite || m.abs( tail ) < obj._repeat ) ) {
             obj._onRepeat.call( obj, obj._target );
         }
     }
@@ -71,8 +79,7 @@ function notifyOnRepeat( obj ) {
 /* Updates a tween or timeline state.
 */
 function updateState( obj ) {
-    //console.log( obj._globalProgress );
-    if ( obj._totalProgress === 1 ) {
+    if ( ! obj._infinite && obj._totalProgress === 1 ) {
         obj.kill();
     }
 }
@@ -102,21 +109,27 @@ function seek( obj, time, accountForRepeats ) {
     obj._totalProgress = time / obj._totalDuration;
 
     if ( time > obj._delay ) {
+        var time = time - obj._delay;
         if ( accountForRepeats ) {
-            var loc = obj._duration + 0.00001;
-            var elapsed = time - obj._delay;
-            elapsed = elapsed % ( loc + obj._repeatDelay );
+            var loc = obj._duration + DEC_FIX;
+            var elapsed = time % ( loc + obj._repeatDelay );
             if ( elapsed <= loc ) {
                 obj._progress = _roundDecimals( ( elapsed % loc ) / loc );
             } else {
                 obj._progress = 1;
             }
         } else {
-            obj._progress = ( time - obj._delay ) / obj._duration;
+            //time = obj._repeatDelay;
+            obj._progress = time / obj._totalDuration;
         }
     } else {
         obj._progress = 0;
     }
+
+    if ( obj._reversed ) {
+        obj._progress = 1 - obj._progress;
+    }
+
     console.log( 
         'local:', obj._progress,
         'global:', obj._totalProgress,
