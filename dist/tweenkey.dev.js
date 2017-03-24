@@ -18,6 +18,7 @@
 var wnd = window || {};
 var PERFORMANCE = wnd.performance;
 var TYPE_FNC = ({}).toString;
+var DEC_FIX = 0.000001;
 var m = Math;
 
 var colorRE = new RegExp(/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i);
@@ -59,7 +60,7 @@ var _clamp = function( value, min, max ) {
 };
 
 var _now = function() {
-    return PERFORMANCE && PERFORMANCE.now && PERFORMANCE.now() || +new Date();
+    return PERFORMANCE.now();
 };
 var _extend = function( target, source, overwrite ) {
     for ( var key in source ) {
@@ -503,22 +504,24 @@ function initObjectRunnable( obj, params ) {
     var p = params || {};
     var delay = _isNumber( p.delay ) ? m.max( 0, p.delay ) : 0;
     var repeatCount = _isNumber( p.repeat ) ? p.repeat : 0;
-
+    
+    obj._queued       = false;
     obj._totalDuration  = 0;
-    obj._reversed       = _isBoolean( p.reversed ) ? p.reversed : false;
-    obj._direction      = obj._reversed ? -1 : 1;
+    obj._inverted       = _isBoolean( p.inverted ) ? p.inverted : false;
+    obj._direction      = 1;
     obj._progress       = 0;
     obj._totalProgress  = 0;
     obj._elapsedTime    = 0;
     obj._lastElapsedTime= 0;
-    obj._alive          = true;
     obj._delay          = delay;
-    obj._delayLeft      = delay;
     obj._yoyo           = _isBoolean( p.yoyo ) ? p.yoyo : false;
     // when repeat and yoyo are combined you can specify how many yoyo laps you want,
     // by default if no repeat param is set it repeats forever (-1)
-    obj._repeat         = obj._yoyo ? ( repeatCount > 0 ? repeatCount : -1 ) : repeatCount;
-    obj._repeatLeft     = obj._repeat;
+    if ( _isNumber( p.repeat ) === false && obj._yoyo ) {
+        repeatCount = -1;
+    }
+    obj._repeat         = repeatCount;
+    obj._infinite       = ( obj._yoyo === true && obj._repeat === -1 ) || obj._repeat === -1;
     obj._repeatDelay    = _isNumber( p.repeatDelay ) ? m.max( 0, p.repeatDelay ) : 0;
     obj._timeScale      = _isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
     obj._running        = _isBoolean( p.autoStart ) ? p.autoStart : true;
@@ -530,111 +533,122 @@ function initObjectRunnable( obj, params ) {
  * takes into account the current timeScale
  */
 function applyStep( obj, dt ) {
-    var step = dt * obj._timeScale;
-    
-    if ( obj._delayLeft > 0 ) {
-        obj._delayLeft -= _roundDecimals( step );
-        if ( obj._delayLeft < 0 ) {
-            // pass the remainder as step for tweening
-            step = m.abs( obj._delayLeft );
-            obj._delayLeft = 0;
-        } else {
-            step = 0;
-        }
-    }
+    dt *= obj._direction;
+    var time = obj._elapsedTime + dt * obj._timeScale;
+    seek( obj, time, true, true );
+}
 
-    if ( step > 0 ) {
-        var progress = ( obj._elapsedTime + step ) / obj._totalDuration;
-        seek( obj, progress, true, false );
+function notifyOnUpdate( obj ) {
+    if ( obj._elapsedTime > obj._delay ) {
+        obj._onUpdate.call( obj, obj._target );
     }
 }
 
 function notifyStart( obj ) {
-    if ( obj._lastElapsedTime === 0 && obj._elapsedTime > 0 ) {
-        obj._onStart.call( obj._target || obj );
+        if ( obj._elapsedTime > obj._delay ) {
+            var lastElapsed = m.max( 0, obj._lastElapsedTime - obj._delay );
+            if ( lastElapsed === 0 ) {
+            obj._onStart.call( obj._target || obj );
+        }
     }
 }
 
 function notifyOnComplete( obj ) {
-    if ( obj._totalProgress === 1 &&
-        obj._lastElapsedTime !== obj._totalDuration ) {
+    if ( obj._elapsedTime > obj._delay &&
+        obj._totalDuration === _roundDecimals( obj._elapsedTime )  &&
+        ! obj._infinite ) {
             obj._onComplete.call( obj, obj._target );
         }
 }
 
 function notifyOnRepeat( obj ) {
-    if ( obj._elapsedTime > 0 &&
-        obj._repeat > 0 || obj._yoyo ) {
+    if ( obj._elapsedTime > obj._delay &&
+        ( obj._repeat > 0 || obj._yoyo ) ) {
+        var delay = obj._delay;
         var d = obj._duration + obj._repeatDelay;
-        var a = obj._elapsedTime / d;
-        var b = obj._lastElapsedTime / d;
+        var a = ( obj._elapsedTime - delay ) / d;
+        var b = ( obj._lastElapsedTime - delay ) / d;
         var repeatCount = ~b - ~a;
         var tail = a > b ? b : a;
-        if ( repeatCount !== 0 && m.abs( tail ) < obj._repeat ) {
+        if ( repeatCount !== 0 && 
+            ( obj._infinite || m.abs( tail ) < obj._repeat ) ) {
             obj._onRepeat.call( obj, obj._target );
         }
     }
 }
 
-/* Updates a tween or timeline state.
-*/
+/*
+ * Updates a tween or timeline state.
+ */
 function updateState( obj ) {
-    //console.log( obj._globalProgress );
-    if ( obj._totalProgress === 1 ) {
-        obj.kill();
+    if ( ! obj._infinite && obj._totalProgress === 1 ) {
+        obj.clear();
     }
 }
 
-
-// sets tweens and timelines to a certain progress
-function seek( obj, progress, accountForRepeats, accountForDelay ) {
-    
-    var local = obj._duration;
-    var total = obj._totalDuration;
-
-    if ( accountForDelay ) {
-        // Adjust progress to take into account object's delay
-        var delay = obj._delay;
-        var delayProgress = 0;
-        if ( accountForRepeats ) {
-            // global
-            delayProgress = delay / ( delay + total );
-            progress = ( ( progress - delayProgress ) / delayProgress ) / total;
-            
-        } else {
-            // local
-            delayProgress = delay / ( delay + local );
-            progress = ( progress - delayProgress ) / delayProgress;
-        }
-        obj._delayLeft = m.max( 0, obj._delayLeft - obj._elapsedTime );
+function seekProgress( obj, progress, global, accountForDelay ) {
+    progress = _clamp( progress, 0, 1 );
+    var delayJump = accountForDelay ? 0 : obj._delay;
+    var duration = 0;
+    if ( global ) {
+        duration = obj._totalDuration;
     } else {
-        obj._delayLeft = 0;        
+        duration = obj._duration + obj._repeatDelay;
+        // Normalize the duration to treat following calcs
+        // with the same delay jump.
+        duration += obj._delay;
     }
     
-    progress = _clamp( progress, 0, 1 );    
-    progress = progress;
+    var time = progress * ( duration - delayJump ) ;
+    seek( obj, time + delayJump, global );
+}
 
-    if ( accountForRepeats ) {
-        obj._totalProgress = progress;
-        // transform total to local
-        var localRemainder = ( total * progress ) % ( local + 0.0001 );
-        obj._progress = localRemainder / local;
-        
-    } else {
-        obj._progress = progress;
-        // transform local to total
-        obj._totalProgress = ( progress * local ) / total;
-    }
+// sets tweens and timelines to a certain time
+function seek( obj, time ) {
+    time = m.max( 0, time );
+    
+    
 
     obj._lastElapsedTime = obj._elapsedTime;
-    obj._elapsedTime = total * obj._totalProgress;
-    obj._progress = obj._progress;//_roundDecimals( obj._progress );
-    obj._totalProgress = obj._totalProgress;// );
-    console.log( 
+    obj._elapsedTime = time;
+    
+    if ( obj._elapsedTime > obj._totalDuration ) {
+        
+        if ( ! obj._infinite ) {
+            time = m.min( obj._totalDuration, time );
+            obj._elapsedTime = time;
+        }
+
+        time = ( time - obj._delay - DEC_FIX ) % obj._totalDuration + obj._delay;
+    }
+    
+    obj._totalProgress = _roundDecimals( time / obj._totalDuration );
+
+    if ( time > obj._delay ) {
+        var time = time - obj._delay;
+        var local = obj._duration + DEC_FIX;
+        var elapsed = time % ( local + obj._repeatDelay );
+        if ( elapsed <= local ) {
+            obj._progress = _roundDecimals( ( elapsed % local ) / local );
+        } else {
+            obj._progress = 1;
+        }
+    } else {
+        obj._progress = 0;
+    }
+
+    if ( obj._inverted ) {
+        obj._progress = 1 - obj._progress;
+    }
+
+//    console.log( obj._progress );
+
+    return;
+    /*console.log(
         'local:', obj._progress,
         'global:', obj._totalProgress,
         'elapsed time:', obj._elapsedTime
-    );
+    );*/
 }
 
 // TODO: add a sleep tweens layer to avoid main tweens array from getting too big
@@ -643,6 +657,7 @@ var timelines = [];
 var tickers = [];
 var mainTicker;
 var sleeping = true;
+var cleanupDirty = false;
 
 var PROP_NUMBER = 0;
 var PROP_ARRAY = 1;
@@ -663,13 +678,423 @@ var TL_ITEM_INVALID = 6;
 var propDict = {};
 var propDictIdx = 1;
 
-
-function awake() {
-    setTimeout( function() {
+function wakeup() {
+    if ( sleeping === true ) {
         sleeping = false;
-        onFrame();
-    }, 1 );
+        setTimeout( function() {
+            onFrame();
+        }, 1 );
+    }
 }
+
+var PROP_NUMBER = 0;
+var PROP_ARRAY = 1;
+var PROP_COLOR = 2;
+var PROP_WAYPOINTS = 3;
+var PROP_INVALID = 4;
+
+function Tween() {}
+
+Tween.prototype = {
+    delay: function( seconds ) {
+        this._delayLeft = this._delay = seconds;
+        return this;
+    },
+    progress: function( progress, accountForDelay ) {
+        queueTween( this );
+        seekProgress( this, progress, true, accountForDelay );
+        tweenTick( this, 0 );
+        return this;
+    },
+    time: function( seconds, accountForDelay ) {
+        seek( this, seconds, accountForDelay, true );
+        return this;
+    },
+    render: function() {
+        overrideDictionaryProperties( this );
+        updateTweenProperties( this );
+    },
+    restart: function( accountForDelay, immediateRender ) {
+
+        // default for accountForDelay is false
+        accountForDelay = _isBoolean( accountForDelay ) ? accountForDelay : false;
+        
+        // default for immediateRender is true
+        immediateRender = _isBoolean( immediateRender ) ? immediateRender : true;
+        
+        this._lastElapsedTime = 0;
+        this._elapsedTime = 0;
+        this._progress = 0;
+        this._totalProgress = 0;
+        this._running = true;
+        this._direction = 1;
+        this.resume();
+
+        if ( immediateRender ) {
+            this.render();
+        }
+
+        return this;
+    },
+    reverse: function() {
+        this._direction *= -1;
+        return this;
+    },
+    timeScale: function( scale ) {
+        if ( _isNumber( scale ) && scale > 0 ) {
+            this._timeScale = scale;
+        }
+        return this;
+    },
+    clear: function() {
+        if ( arguments.length > 0 ) {
+
+            // fix: avoid optimization bailout
+            var args = [];
+            for ( var i = 0; i < arguments.length; ++i ) {
+                args[ i ] = arguments[ i ];
+            }
+            disableProperties( this, args );
+
+        } else {
+            this._running = false;
+            disableProperties( this );
+            this._firstNode = undefined;
+        }
+        cleanupDirty = true;
+        return this;
+    },
+    pause: function() {
+        this._running = false;
+        cleanupDirty = true;
+        return this;
+    },
+    resume: function() {
+        this._running = true;
+        queueTween( this );
+        return this;
+    },
+    toString: function() {
+        return '[object Tween]';
+    }
+};
+
+function TweenProperty( id, name, target, origProps, targetProps ) {
+    this.id = id;
+    this.name = name;
+    this.target = target;
+    this.origProps = origProps;
+    this.targetProps = targetProps;
+    this.enabled = true;
+    this.length = 0;
+}
+
+TweenProperty.prototype = {
+    _expandArrayProperties: function( o, t ) {
+        var tp = this.target[ this.name ];
+        var len = m.max( o.length, t.length );
+        for ( var i = 0; i < len; i++ ) {
+            o[ i ] = o[ i ] != undefined ? o[ i ] : tp[ i ];
+            t[ i ] = t[ i ] != undefined ? t[ i ] : tp[ i ];
+        }
+        this.length = len;
+    },
+    _getPropertyType: function( s, e, t ) {
+        if ( _isNumber( s ) &&
+         _isNumber( e ) &&
+         _isNumber( t ) ) {
+            return PROP_NUMBER;
+        } else if (
+            colorRE.test( s ) &&
+            colorRE.test( e ) &&
+            colorRE.test( t ) ) {
+                return PROP_COLOR;
+        } else if ( 
+            _isArray( s ) &&
+            _isArray( e ) &&
+            _isArray( t ) ) {
+                return PROP_ARRAY;
+        } else if (
+            _isNumber( s ) &&
+            _isArray( e ) &&
+            _isNumber( t )
+        ) {
+            return PROP_WAYPOINTS;
+        } else {
+            return PROP_INVALID;
+        }
+    },
+    refresh: function() {
+        this.start = this.origProps[ this.name ];
+        if ( this.start === undefined ) {
+            this.start = this.target[ this.name ];
+        }
+        
+        this.end = this.targetProps[ this.name ];
+        if ( this.end === undefined ) {
+            this.end = this.target[ this.name ];
+        }
+
+        this.type = getPropertyType(
+            this.start, this.end, this.target[ this.name ] );
+        
+        if ( this.type == PROP_ARRAY ) {
+            this._expandArrayProperties( this.start, this.end );
+        } else if ( this.type == PROP_WAYPOINTS ) {
+            this.waypoints = [ this.start ].concat( this.end );
+        } else if ( this.type == PROP_COLOR ) {
+            this.colorStart = _hexStrToRGB( this.start );
+            this.colorEnd = _hexStrToRGB( this.end );
+        }
+    }
+};
+
+/*
+* Reassigns all <enabled> properties from tween targets into the dictionary,
+* if a property exists it will disable it prior deletion
+*/
+function overrideDictionaryProperties( tween ) {
+    var currentNode = tween._firstNode;
+
+    do {
+        for ( var idx = currentNode.properties.length; idx--; ) {
+            var property = currentNode.properties[ idx ];
+            if ( property.enabled ) {
+                
+                // If there is a running property disable it
+                // and remove it from dictionary
+                if ( propDict[ property.id ] && propDict[ property.id ] !== property) {
+                    propDict[ property.id ].enabled = false;
+                    delete propDict[ property.id ];
+                }
+
+                propDict[ property.id ] = property;
+            }
+        }
+    } while ( currentNode = currentNode.next );
+}
+
+/*
+* Sync values between object properties and target properties
+*/
+function syncTargetProperties( tween ) {
+    var currentNode = tween._firstNode;
+    do {
+        for ( var idx = currentNode.properties.length; idx--; ) {
+            currentNode.properties[ idx ].refresh();
+        }
+    } while ( currentNode = currentNode.next );
+}
+
+/*
+* Disables only <enabled> properties of a tween and removes them from dictionary.
+* Keys param specifies an array containing which properties to disable, by default
+* if no keys param is provided all enabled properties will be disabled.
+*/
+function disableProperties( tween, keys ) {
+
+    var all = ! _isArray( keys );
+    var currentNode = tween._firstNode;
+
+    do {
+        for ( var idx = currentNode.properties.length; idx--; ) {
+
+            var property = currentNode.properties[ idx ];
+
+            if ( property.enabled && ( all || keys.indexOf(property.name) > -1 ) ) {
+                property.enabled = false;
+                delete propDict[ property.id ];
+            }
+
+        }
+    } while ( currentNode = currentNode.next );
+}
+
+
+function getLocalProgress( obj ) {
+    if ( obj._yoyo && obj._elapsedTime > obj._duration + obj._delay ) {
+        // when yoyo is active we need to invert
+        // the progress on each odd lap
+        var local = obj._duration + obj._repeatDelay + DEC_FIX;
+        var elapsed = m.max( 0, obj._elapsedTime - obj._delay );
+        var lapOdd = m.ceil( elapsed / local ) % 2 === 0;
+        return lapOdd ? 1 - obj._progress : obj._progress;
+    } else {
+        return obj._progress;
+    }
+}
+
+function updateTweenProperties( tween ) {
+    var currentNode = tween._firstNode;
+    var updatedTargets = 0;
+
+    do {
+        var progress = getLocalProgress( tween );
+        var updated = false;
+        for ( var idx = currentNode.properties.length; idx--; ) {
+            var p = currentNode.properties[ idx ];
+            if ( p.enabled && p.type !== PROP_INVALID ) {
+                
+                switch( p.type ) {
+                    case PROP_ARRAY:
+                        var arr = currentNode.target[ p.name ];
+                        for ( var j = 0; j < p.length; j++ ) {
+                            var start = p.start[ j ];
+                            var end = p.end[ j ] - start;
+                            
+                            arr[ j ] = tween._ease(
+                                progress,
+                                start,
+                                end
+                            );
+                        }
+                        break;
+                    case PROP_NUMBER:
+                        currentNode.target[ p.name ] = tween._ease(
+                            progress,
+                            p.start,
+                            p.end
+                        );
+                        break;
+                    case PROP_WAYPOINTS:
+                        var len = p.waypoints.length - 1;
+                        var a = len * progress;
+                        var b = m.floor( a );
+                        var val = tween._ease(
+                            a - b,
+                            p.waypoints[ b ],
+                            p.waypoints[ b + 1 > len ? len : b + 1 ]
+                        );
+                        currentNode.target[ p.name ] = val;
+                        break;
+                    case PROP_COLOR:
+                        var r = tween._ease( progress, p.colorStart[ 0 ], p.colorEnd[ 0 ] );
+                        var g = tween._ease( progress, p.colorStart[ 1 ], p.colorEnd[ 1 ] );
+                        var b = tween._ease( progress, p.colorStart[ 2 ], p.colorEnd[ 2 ] );
+                        var hex = ( ( r * 255 ) << 16 ) + ( ( g * 255) << 8 ) + ( b * 255 | 0 );
+                        currentNode.target[ p.name ] = '#' + hex.toString( 16 );
+                        break;
+                }
+                
+                updated = p.type !== PROP_INVALID;
+            } else {
+                // We remove the property entirely to avoid performance
+                // issues due many disabled properties loopping.
+                // Restarting the loop will bring back the removed
+                // properties by calling resetTargetProperties()
+                currentNode.properties.splice( idx, 1 );
+            }
+        }
+
+        updatedTargets += updated | 0;
+
+    } while ( currentNode = currentNode.next );
+
+    return updatedTargets;
+}
+
+
+
+/*
+* Builds a linked list of all objects and properties to iterate
+* It stores the first linked object in the current tween
+*/
+function resetTargetProperties( tween, targetProperties, originProperties ) {
+
+    var targets = _isArray( tween._target ) ? tween._target : [ tween._target ];
+    var prevNode, firstNode;
+
+    // merge keys of targetProperties and originProperties without duplicates
+    var allKeys = Object.keys( targetProperties );
+	var oKeys = Object.keys( originProperties );
+	for ( var i = 0; i < oKeys.length; i++ ) {
+		if ( ! targetProperties[ oKeys[ i ] ] ) {
+			allKeys.push( oKeys[ i ] );
+		}
+	}
+
+    for ( var idx = targets.length; idx--; ) {
+        var currentTarget = targets[ idx ];
+
+        // Tag object id without overwrite
+        currentTarget._twkId = currentTarget._twkId || propDictIdx++;
+
+        var properties = [];
+        for ( var pIdx = 0; pIdx < allKeys.length; pIdx++ ) {
+            var key = allKeys[ pIdx ];
+
+            // Check if key is not a tween property
+            // also we check that the property exists on target
+            if ( !tween.hasOwnProperty( key ) && key in currentTarget ) {
+                var property = new TweenProperty(
+                    currentTarget._twkId + key,
+                    key,
+                    currentTarget,
+                    originProperties,
+                    targetProperties
+                );
+
+                property.refresh();
+                properties.push( property );
+            }
+        }
+
+        var currentNode = {
+            target      : currentTarget,
+            properties  : properties
+        };
+
+        firstNode = firstNode || currentNode;
+
+        if ( prevNode ) {
+            prevNode.next = currentNode;
+        }
+
+        prevNode = currentNode;
+    }
+
+    tween._firstNode = firstNode;
+}
+
+function Ticker( params ) {
+    params = params || {};
+    this._onTick = _isFunction( params.onTick ) ? params.onTick : _noop;
+    this.setFPS( params.fps );
+    this.resume();
+}
+
+Ticker.prototype = {
+    pause: function() {
+        this._running = false;
+        return this;
+    },
+    resume: function() {
+        this._then = _now();
+        this._running = true;
+        queueTicker( this );
+        return this;
+    },
+    tick: function( time ) {
+        var delta = time - this._then;
+
+        if ( delta > this._fpsStep ) {
+            var drop = delta % this._fpsStep;
+            this._then = time - drop;
+            this._onTick( m.min( delta - drop, this._fpsStep * 4 ) / 1000 );
+        }
+
+        return this;
+    },
+    setFPS: function( fps ) {
+        this.fps = _isNumber( fps ) && fps > 0 ? fps : 60;
+        this._fpsStep = 1000 / this.fps;
+    },
+    toString: function() {
+        return '[object Ticker]';
+    }
+}
+
+
 /*
 * Disables only <enabled> properties of a tween and removes them from dictionary.
 * Keys param specifies an array containing which properties to disable, by default
@@ -804,14 +1229,12 @@ TweenProperty.prototype = {
 };
 
 function getLocalProgress( obj ) {
-    if ( obj._yoyo && obj._elapsedTime > 0 ) {
-        
+    if ( obj._yoyo && obj._elapsedTime > obj._duration + obj._delay ) {
         // when yoyo is active we need to invert
         // the progress on each odd lap
-        var local = obj._duration;
-        var total = obj._totalDuration;
-
-        var lapOdd = m.ceil( ( total * obj._totalProgress ) / local ) % 2 === 0;
+        var local = obj._duration + obj._repeatDelay + DEC_FIX;
+        var elapsed = m.max( 0, obj._elapsedTime - obj._delay );
+        var lapOdd = m.ceil( elapsed / local ) % 2 === 0;
         return lapOdd ? 1 - obj._progress : obj._progress;
     } else {
         return obj._progress;
@@ -824,7 +1247,6 @@ function updateTweenProperties( tween ) {
 
     do {
         var progress = getLocalProgress( tween );
-        //console.log( 'progress:', tween._progress );
         var updated = false;
         for ( var idx = currentNode.properties.length; idx--; ) {
             var p = currentNode.properties[ idx ];
@@ -853,7 +1275,7 @@ function updateTweenProperties( tween ) {
                         break;
                     case PROP_WAYPOINTS:
                         var len = p.waypoints.length - 1;
-                        var a = len *  progress;
+                        var a = len * progress;
                         var b = m.floor( a );
                         var val = tween._ease(
                             a - b,
@@ -893,13 +1315,13 @@ function updateTweenProperties( tween ) {
 */
 function tweenTick( tween, dt ) {
     notifyStart( tween );
-    if ( tween._elapsedTime > 0 ) {
+    if ( tween._elapsedTime - tween._delay > 0 ) {
         if ( tween._syncNextTick ) {
             tween._syncNextTick = false;
             // Update current properties from targets
             syncTargetProperties( tween );
 
-            // Kill all previous active properties in tween
+            // clear all previous active properties in tween
             overrideDictionaryProperties( tween );
         }
 
@@ -908,12 +1330,12 @@ function tweenTick( tween, dt ) {
 
         // Fire onUpdate notification only if one or more properties were updated
         if ( updatedTargets > 0 ) {
-            tween._onUpdate.call( tween._target );
+            notifyOnUpdate( tween );
         } else {
 
             // No updated targets means all properties where overrided
-            // We kill the tween early to avoid further notifications
-            tween.kill();
+            // We clear the tween early to avoid further notifications
+            tween.clear();
         }
     } else {
         updateTweenProperties( tween );
@@ -931,7 +1353,7 @@ function tweenTick( tween, dt ) {
 */
 function resetTargetProperties( tween, targetProperties, originProperties ) {
 
-    var targets =  _isArray( tween._target ) ? tween._target : [ tween._target ];
+    var targets = _isArray( tween._target ) ? tween._target : [ tween._target ];
     var prevNode, firstNode;
 
     // merge keys of targetProperties and originProperties without duplicates
@@ -986,325 +1408,138 @@ function resetTargetProperties( tween, targetProperties, originProperties ) {
     tween._firstNode = firstNode;
 }
 
-function popTweenFromRenderer( tween ) {
-    var idx = tweens.indexOf( tween );
-    if ( idx !== -1 ) {
-        tweens.splice( idx, 1 );
-        tween._queued = false;
-    }
-}
-
-function pushTweenToRenderer( tween ) {
+function queueTween( tween ) {
     if ( ! tween._queued ) {
         resetTargetProperties( tween, tween._to, tween._from );
-        
         tweens.push( tween );
-        
-        // flag to avoid pushing again to renderer
         tween._queued = true; 
-
         // refresh all properties
         tween._syncNextTick = true;
-
-        awake();
+        wakeup();
     }
 }
 
-function getEasing( val ) {
-    if ( easing[ val ] ) {
-        return easing[ val ];
-    } else if ( _isArray( val ) && val.length == 4 ) {
-        return wrapEasing( bezierEase.apply( this, val ) );
-    } else {
-        if ( val != undefined ) {
-            var easingNames = Object.keys( easing ).join(' | ');
-            console.warn( 'Invalid easing name: ' + val );
-            console.warn( 'Available easings: ' + easingNames );
+
+function queueTicker( ticker ) {
+    if ( ! ticker._queued ) {
+        tickers.push( ticker );
+        wakeup();
+    }
+}
+
+function Timeline ( params ) {
+    initTimeline( this, params );
+    this._definitions = {};
+    this._computedItems = [];
+    this._lastDirection = this._direction;
+    this._lastElapsedTime = 0;
+    this._startLabel = '';
+    this._ticker = newTicker({
+        onTick: this.tick.bind( this ),
+    });
+    this._ticker.pause();
+}
+
+Timeline.prototype = {
+    _precompute: function( label ) {
+        if ( this._needsRecompute ) {
+            label = label || this._startLabel;
+            var items = computeTimeLineItems( this._definitions, label );
+            this._computedItems = absShiftTimeLineItems( items );
+            this._totalDuration = getItemsDuration( this._computedItems );
+            console.log( this._totalDuration );
+            this._needsRecompute = false;
         }
-        return easing.linear;
-    }
-}
-
-function setTweenDuration( tween ) {
-    var isInfinite = tween._yoyo === true && tween._repeat === -1;
-    if ( isInfinite ) {
-        // if is an infinite loop then just 
-        // take two laps as the total duration
-        tween._totalDuration = tween._duration * 2;
-    } else if ( tween._repeat > 0 ) {
-        var d = tween._duration;
-        var repeatDuration = d;
-        d += repeatDuration * tween._repeat ;
-        tween._totalDuration = d;
-    } else {
-        tween._totalDuration = tween._duration;
-    }
-}
-
-function initTween( tween, target, params ) {
-    tween._initted = false;
-    var duration = params.shift();
-    var cfg = params.shift();
-
-    // expecting duration in position 1
-    // buf if an object was given instead
-    // then treat it as Tween.set
-    if ( _isObject( duration ) ) {
-        cfg = duration;
-        duration = 0;
-    }
-
-    tween._target       = target;
-    tween._queued       = false;
-    tween._syncNextTick = true;
-    tween._ease         = getEasing( cfg.ease );
-    tween._from         = _isObject( cfg.from ) ? cfg.from : {};
-    tween._to           = _isObject( cfg.to ) ? cfg.to: {};
-    tween._duration     = _isNumber( duration ) ? m.max( 0, duration ) : 0;
-    tween._initted      = true;
-    initObjectRunnable( tween, cfg );
-    initObjectCallbacks( tween, cfg );
-    setTweenDuration( tween );
-    
-}
-
-function Tween( params ) {
-    var target = params.shift();
-    if ( typeof target == 'object' && params.length > 0 ) {
-        initTween( this, target, params );
-    } else {
-        throw 'Invalid Tween';
-    }
-    return this;
-}
-
-Tween.prototype = {
-    delay: function( seconds ) {
-        this._delayLeft = this._delay = seconds;
-        return this;
     },
-    progress: function( progress, accountForDelay ) {
-        seek( this, progress, false, accountForDelay );
-        tweenTick( this, 0 );
-        return this;
-    },
-    totalProgress: function( progress, accountForDelay ) {
-        seek( this, progress, true, accountForDelay );
-        tweenTick( this, 0 );
-        return this;
-    },
-    time: function( seconds, accountForDelay ) {
-        seek( this, seconds, accountForDelay, true );
-        return this;
-    },
-    render: function() {
-        overrideDictionaryProperties( this );
-        updateTweenProperties( this );
-    },
-    restart: function( accountForDelay, immediateRender ) {
+    let: function( label, obj ) {
+        var type = getDefinitionType( obj );
+        if ( _isString( label ) && type != TL_ITEM_INVALID ) {
+            
+            var isLine = type == TL_ITEM_LINE_SYNC || type == TL_ITEM_LINE_ASYNC;
+            if ( isLine && !isValidLine( this._definitions, obj ) ) {
+                return this;
+            }
+            
+            if ( type == TL_ITEM_TWEEN ) {
+                // remove tween object from main renderer
+                obj.stop();
+            }
 
-        // default for accountForDelay is false
-        accountForDelay = _isBoolean( accountForDelay ) ? accountForDelay : false;
-        
-        // default for immediateRender is true
-        immediateRender = _isBoolean( immediateRender ) ? immediateRender : true;
-
-        this._elapsedTime = 0;
-        this._progress = 0;
-
-        this._delayLeft = accountForDelay ? this._delay : 0;
-        this._alive = true;
-        this._direction = 1;
-        this.resume();
-
-        if ( immediateRender || this._delayLeft > 0 ) {
-            this.render();
+            this._definitions[ label ] = obj;
+            this._needsRecompute = true;
         }
-
+        return this;
+    },
+    tick: function( dt ) {
+        this._precompute();
+        timelineTick( this, dt );
+        if ( ! this._running ) {
+            this._ticker.clear();
+        }
+        return this;
+    },
+    delay: function( value ) {
+        this._delay = _isNumber( value ) ? value : 0;
+        return this;
+    },
+    plot: function( label ) {
+        if ( typeof plotTimeline !== 'undefined' )
+            plotTimeline( this, label );
         return this;
     },
     reverse: function() {
         this._direction *= -1;
         return this;
     },
-    timeScale: function( scale ) {
-        if ( _isNumber( scale ) && scale > 0 ) {
-            this._timeScale = scale;
-        }
+    yoyo: function( value ) {
+        this._yoyo = _isBoolean( value ) ? value: false;
         return this;
     },
-    kill: function() {
-        if ( arguments.length > 0 ) {
-
-            // fix: avoid optimization bailout
-            var args = [];
-            for ( var i = 0; i < arguments.length; ++i ) {
-                args[ i ] = arguments[ i ];
-            }
-            disableProperties( this, args );
-        } else {
-            this._alive = false;
-            this._running = false;
-        }
+    duration: function() {
+        this._precompute();
+        return this._totalDuration;
+    },
+    timeScale: function( value ) {
+        this._timeScale = _isNumber( value ) ? m.max( 0, value ) : 1;
+    },
+    seek: function( seconds, accountForDelay ) {
+        this._precompute();
+        seek( this, seconds, accountForDelay, true );
+        this.tick( 0 );
+        return this;
+    },
+    progress: function( value, accountForDelay ) {
+        this._precompute();
+        seek( this, value, accountForDelay, false );
+        this.tick( 0 );
         return this;
     },
     pause: function() {
-        this._running = false;
+        this._ticker.pause();
         return this;
     },
     resume: function() {
-        this._running = true;
-        pushTweenToRenderer( this );
+        this._ticker.resume();
         return this;
     },
-    stop: function() {
-        popTweenFromRenderer( this );
+    restart: function( accountForDelay ) {
+        this._delayLeft = accountForDelay ? this._delay : 0;
         return this;
     },
-    toString: function() {
-        return '[object Tween]';
+    play: function( label ) {
+        // TODO: validate label?
+        this._startLabel = label;
+        this._ticker.resume();
+        return this;
+    },
+    clear: function() {
+        this._ticker.clear();
+        return this;
     }
 };
 
-function executeOnAllTweens ( funcName ) {
-    return function() {
-        for ( var idx = tweens.length; idx--; ) {
-            var tween = tweens[ idx ];
-            tween[ funcName ].apply( tween, arguments );
-        }
-    };
-}
-
-function updateTweens( delta ) {
-
-    // clear killed tweens
-    for ( var idx = tweens.length; idx--; ) {
-        if ( ! tweens[ idx ]._alive ) {
-            tweens[ idx ]._queued = false;
-            tweens.splice( idx, 1 );
-        }
-    }
-
-    // update tweens (order matters)
-    for ( var idx = 0, length = tweens.length; idx < length; idx++  ) {
-        tweens[ idx ]._running && tweenTick( tweens[ idx ], delta );
-    }
-}
-
-function onFrame() {
-    var now = _now();
-    var requestNextFrame = false;
-
-    if ( mainTicker._running ) {
-        mainTicker.tick( now );
-        requestNextFrame = true;
-    }
-
-    // Update tickers
-    for ( var idx = tickers.length; idx--; ) {
-        
-        var ticker = tickers[ idx ];
-        
-        if ( ticker._running ) {
-            ticker.tick( now );
-            requestNextFrame = true;
-        }
-
-        if ( ! ticker._alive ) {
-            tickers.splice( idx, 1 );
-        }
-    }
-
-    if ( tweens.length === 0 && tickers.length === 0 ) {
-        sleeping = true;
-    }
-
-    if ( requestNextFrame && !sleeping ) {
-        rAF( onFrame );
-    }
-}
-
-function newTicker( params ) {
-    var ticker = new Ticker( params );
-    tickers.push(ticker);
-    awake();
-    return ticker;
-}
-
-function Ticker( params ) {
-    params = params || {};
-    this._onTick = _isFunction( params.onTick ) ? params.onTick : _noop;
-    this._alive = true;
-    this.setFPS( params.fps );
-    this.resume();
-}
-
-Ticker.prototype = {
-    pause: function() {
-        this._running = false;
-        return this;
-    },
-    resume: function() {
-        this._then = _now();
-        this._running = true;
-        rAF( onFrame );
-        return this;
-    },
-    kill: function() {
-        this._alive = false;
-        return this;
-    },
-    tick: function( time ) {
-        var delta = time - this._then;
-
-        if ( delta > this._fpsStep ) {
-            var drop = delta % this._fpsStep;
-            this._then = time - drop;
-            this._onTick( m.min( delta - drop, this._fpsStep * 2 ) / 1000 );
-        }
-
-        return this;
-    },
-    setFPS: function( fps ) {
-        this.fps = _isNumber( fps ) && fps > 0 ? fps : 60;
-        this._fpsStep = 1000 / this.fps;
-    },
-    toString: function() {
-        return '[object Ticker]';
-    }
-}
-
-function setAutoUpdate( enabled ) {
-    if ( enabled ) {
-        mainTicker.resume();
-    } else {
-        mainTicker.pause();
-    }
-}
-
-function manualStep( step ) {
-    step = typeof step == 'number' ? step : mainTicker._fpsStep;
-    if ( step < 0 ) {
-        step = 0;
-    }
-    ! mainTicker._running && updateTweens( step );
-}
-
-function newTweenFactory() {        
-    return function create() {
-
-        // fix: avoid optimization bailout
-        // https://github.com/petkaantonov/bluebird/wiki/Optimization-killers
-        var i = arguments.length;
-        var args = [];
-        while (i--) args[i] = arguments[i];
-
-        var tween = new Tween( args );
-        if ( tween._initted ) {
-            pushTweenToRenderer( tween );
-        }
-        return tween;
-    };
+function newTimeline( params ) {
+    return new Timeline( params );
 }
 
 function getDefinitionType( obj ) {
@@ -1478,18 +1713,6 @@ function initTimeline( tl, params ) {
     tl._initted = true;
 }
 
-function Timeline ( params ) {
-    initTimeline( this, params );
-    this._definitions = {};
-    this._computedItems = [];
-    this._lastDirection = this._direction;
-    this._lastElapsedTime = 0;
-    this._startLabel = '';
-    this._ticker = newTicker({
-        onTick: this.tick.bind( this ),
-    });
-    this._ticker.pause();
-}
 
 function timelineTick( tl, dt ) {
     if ( tl._delayLeft === 0 ) {
@@ -1516,117 +1739,168 @@ function timelineTick( tl, dt ) {
     applyStep( tl, dt );
 }
 
-Timeline.prototype = {
-    _precompute: function( label ) {
-        if ( this._needsRecompute ) {
-            label = label || this._startLabel;
-            var items = computeTimeLineItems( this._definitions, label );
-            this._computedItems = absShiftTimeLineItems( items );
-            this._totalDuration = getItemsDuration( this._computedItems );
-            console.log( this._totalDuration );
-            this._needsRecompute = false;
+function getEasing( val ) {
+    if ( easing[ val ] ) {
+        return easing[ val ];
+    } else if ( _isArray( val ) && val.length == 4 ) {
+        return wrapEasing( bezierEase.apply( this, val ) );
+    } else {
+        if ( val != undefined ) {
+            var easingNames = Object.keys( easing ).join(' | ');
+            console.warn( 'Invalid easing name: ' + val );
+            console.warn( 'Available easings: ' + easingNames );
         }
-    },
-    let: function( label, obj ) {
-        var type = getDefinitionType( obj );
-        if ( _isString( label ) && type != TL_ITEM_INVALID ) {
-            
-            var isLine = type == TL_ITEM_LINE_SYNC || type == TL_ITEM_LINE_ASYNC;
-            if ( isLine && !isValidLine( this._definitions, obj ) ) {
-                return this;
-            }
-            
-            if ( type == TL_ITEM_TWEEN ) {
-                // remove tween object from main renderer
-                obj.stop();
-            }
-
-            this._definitions[ label ] = obj;
-            this._needsRecompute = true;
-        }
-        return this;
-    },
-    tick: function( dt ) {
-        this._precompute();
-        timelineTick( this, dt );
-        if ( ! this._alive ) {
-            this._ticker.kill();
-        }
-        return this;
-    },
-    delay: function( value ) {
-        this._delay = _isNumber( value ) ? value : 0;
-        return this;
-    },
-    plot: function( label ) {
-        if ( typeof plotTimeline !== 'undefined' )
-            plotTimeline( this, label );
-        return this;
-    },
-    reverse: function() {
-        this._direction *= -1;
-        return this;
-    },
-    yoyo: function( value ) {
-        this._yoyo = _isBoolean( value ) ? value: false;
-        return this;
-    },
-    duration: function() {
-        this._precompute();
-        return this._totalDuration;
-    },
-    timeScale: function( value ) {
-        this._timeScale = _isNumber( value ) ? m.max( 0, value ) : 1;
-    },
-    seek: function( seconds, accountForDelay ) {
-        this._precompute();
-        seek( this, seconds, accountForDelay, true );
-        this.tick( 0 );
-        return this;
-    },
-    progress: function( value, accountForDelay ) {
-        this._precompute();
-        seek( this, value, accountForDelay, false );
-        this.tick( 0 );
-        return this;
-    },
-    pause: function() {
-        this._ticker.pause();
-        return this;
-    },
-    resume: function() {
-        this._ticker.resume();
-        return this;
-    },
-    restart: function( accountForDelay ) {
-        this._delayLeft = accountForDelay ? this._delay : 0;
-        return this;
-    },
-    play: function( label ) {
-        // TODO: validate label?
-        this._startLabel = label;
-        this._ticker.resume();
-        return this;
-    },
-    kill: function() {
-        this._ticker.kill();
-        return this;
+        return easing.linear;
     }
-};
-
-function newTimeline( params ) {
-    return new Timeline( params );
 }
 
-mainTicker = new Ticker({ onTick: updateTweens });
+function setTweenDuration( tween ) {
+    
+    var total = 0;
+    var tweenDuration = tween._duration;
+    var repeatDelay = tween._repeatDelay;
+    var delay = tween._delay;
+    
+    if ( tween._infinite ) {
+        
+        // if is an infinite loop then just 
+        // take two laps as the total duration
+        total = tween._duration * 2;
+        total += delay + repeatDelay * 2;
+    } else if ( tween._repeat > 0 ) {
+        var repeatDuration = ( tweenDuration + repeatDelay ) * tween._repeat;
+        total = tweenDuration + repeatDuration + delay;
+    } else {
+        total = tweenDuration + delay;
+    }
+
+    tween._totalDuration = total;
+}
+
+function initTween( tween, target, params ) {
+    tween._initted = false;
+    var duration = params.shift();
+    var cfg = params.shift();
+
+    // expecting duration in position 1
+    // buf if an object was given instead
+    // then treat it as Tween.set
+    if ( _isObject( duration ) ) {
+        cfg = duration;
+        duration = 0;
+    }
+
+    tween._target       = target;
+    
+    tween._syncNextTick = true;
+    tween._ease         = getEasing( cfg.ease );
+    tween._from         = _isObject( cfg.from ) ? cfg.from : {};
+    tween._to           = _isObject( cfg.to ) ? cfg.to: {};
+    tween._duration     = _isNumber( duration ) ? m.max( 0, duration ) : 0;
+    tween._initted      = true;
+    initObjectRunnable( tween, cfg );
+    initObjectCallbacks( tween, cfg );
+    setTweenDuration( tween );
+}
+
+function executeOnAllTweens ( funcName ) {
+    return function() {
+        for ( var idx = tweens.length; idx--; ) {
+            var tween = tweens[ idx ];
+            tween[ funcName ].apply( tween, arguments );
+        }
+    };
+}
+
+function updateTweens( delta ) {
+    delta = m.max( 0, delta );
+    // update tweens (order matters)
+    for ( var idx = 0, length = tweens.length; idx < length; idx++  ) {
+        tweens[ idx ]._running && tweenTick( tweens[ idx ], delta );
+    }
+}
+
+function cleanupRunnable( arr ) {
+    for ( var idx = arr.length; idx--; ) {
+        var obj = arr[ idx ];
+        if ( ! obj._running ) {
+            obj._queued = false;
+            arr.splice( idx, 1 );
+        }
+    }
+}
+
+function onFrame() {
+    if ( cleanupDirty ) {
+        cleanupRunnable( tickers );
+        cleanupRunnable( tweens );
+        cleanupDirty = false;
+    }
+
+    // Update tickers
+    for ( var idx = 0; idx < tickers.length; idx++ ) {
+        tickers[ idx ].tick( _now() );
+    }
+
+    if ( tickers.length > 0 && tweens.length > 0 ) {
+        rAF( onFrame );
+    } else {
+        sleeping = true;
+    }
+
+}
+
+function newTicker( params ) {
+    return new Ticker( params );
+}
+
+function setAutoUpdate( enabled ) {
+    if ( enabled ) {
+        mainTicker.resume();
+    } else {
+        mainTicker.pause();
+    }
+}
+
+function manualStep( step ) {
+    step = typeof step == 'number' ? step : mainTicker._fpsStep;
+    updateTweens( step );
+}
+
+function newTweenFactory() {        
+    return function create() {
+
+        // fix: avoid optimization bailout
+        // https://github.com/petkaantonov/bluebird/wiki/Optimization-killers
+        var i = arguments.length;
+        var args = [];
+        while (i--) args[i] = arguments[i];
+        
+        var target = args.shift();
+        var tween = undefined;
+        if ( typeof target == 'object' && args.length > 0 ) {
+            tween = new Tween();
+            initTween( tween, target, args );
+        } else {
+            throw 'Invalid Tween';
+        }
+        
+        if ( tween._initted ) {
+            queueTween( tween );
+        }
+        return tween;
+    };
+}
+
+mainTicker = new Ticker( { onTick: updateTweens } );
 
 var instance = new function Tweenkey(){};
 
 return _extend( instance, {
     set         : newTweenFactory(),
     tween       : newTweenFactory(),
-    killAll     : executeOnAllTweens( 'kill' ),
-    killTweensOf: function() { console.log('todo'); },
+    clearAll    : executeOnAllTweens( 'clear' ),
+    clearTweensOf: function() { console.log('todo'); },
     pauseAll    : executeOnAllTweens( 'pause' ),
     resumeAll   : executeOnAllTweens( 'resume' ),
     timeline    : newTimeline,

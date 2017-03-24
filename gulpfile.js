@@ -55,7 +55,7 @@ gulp.task( 'clean', ( cb ) => {
 gulp.task( 'build', [ 'clean', 'concat', 'uglify' ] );
 
 gulp.task( 'watch', ()=> {
-    let watcher = gulp.watch( [ 'src/**/*.js', 'demo/*' ], [ 'build' ] );
+    let watcher = gulp.watch( [ 'src/**/*.js', 'demo/*' ], [ 'clean', 'concat' ] );
     watcher.on( 'change', ( event )=> {
         console.log( `\n[${event.type}]: ${event.path}` );
         

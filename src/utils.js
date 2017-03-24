@@ -1,6 +1,7 @@
 var wnd = window || {};
 var PERFORMANCE = wnd.performance;
 var TYPE_FNC = ({}).toString;
+var DEC_FIX = 0.000001;
 var m = Math;
 
 var colorRE = new RegExp(/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i);
@@ -42,7 +43,7 @@ var _clamp = function( value, min, max ) {
 };
 
 var _now = function() {
-    return PERFORMANCE && PERFORMANCE.now && PERFORMANCE.now() || +new Date();
+    return PERFORMANCE.now();
 };
 var _extend = function( target, source, overwrite ) {
     for ( var key in source ) {

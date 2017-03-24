@@ -94,10 +94,10 @@ function getInputRange( params, onChange ) {
 	tl.let( 's1', [ { 't1': 0, 't2': 0.15, 't3': 0.25 } ] );
 	tl.let( 's2', [ { 't4': 0, 't5': 0.2, 't6': 0.3 } ] );
 	tl.let( 'main', [ { 's1': 0, 's2': 1 }, 'cb' ] );
-	tl.play( 'main' ).pause();
-	tl.timeScale(1);
+	//tl.play( 'main' ).pause();
+	//tl.timeScale(1);
 	tl.resume();
-	console.log('======');
+	//console.log('======');
 	tl.plot( 'main' );
 
 });
@@ -106,16 +106,22 @@ function getInputRange( params, onChange ) {
 
 	var circle = getCircleElement( 'c1' );
 	circle.applyStyle();
-	Tweenkey.setFPS( 10 );
-	var t = Tweenkey.tween( circle, 10, { 
+	//Tweenkey.setFPS( 9 );
+	var t = Tweenkey.tween( circle, 1, { 
+		from: { x: 0 },
 		to: { x: 500 },
 		delay: 1,
 		repeat: 2,
+		//inverted: true,
 		yoyo: true,
-		//repeatDelay: 1,
+		repeatDelay: 0.5,
 		//autoStart: false,
 		onUpdate: function() {
+			//console.log( 'update:', circle.x );
+			
+
 			circle.applyStyle();
+
 			//console.log( 'update' );
 		},
 		onStart: function() {
@@ -130,35 +136,18 @@ function getInputRange( params, onChange ) {
 	} );
 
 	var input = getInputRange( { y: 100, width: 1400, max: 100000 }, function() {
-		//t.progress( this.value / 1000, false );
-		t.totalProgress( this.value / 100000 ).pause();
+		//t.totalProgress( this.value / 100000, false ).pause();
+		t.progress( this.value / 100000, true ).pause();
+
 	});
-	//t.totalProgress( 0.3 );
-	if ( ! t._running ) {
-		var x = 0;
-		setInterval( function() {
-			t.totalProgress( x );
-			x += 0.01009;
-		}, 200 );
-		
-		//t.totalProgress( 0 );
-	}
+
+	t.timeScale( 1 );
 	
-/*	t.totalProgress( 0 );	
-	t.totalProgress( 0.1 );
-	t.totalProgress( 0.2 );
-	t.totalProgress( 0.3 );
-	t.totalProgress( 0.4 );
-	t.totalProgress( 0.5 );
-	t.totalProgress( 0.6 );
-	t.totalProgress( 0.7 );
-	t.totalProgress( 0.8 );
-	t.totalProgress( 0.9 );
-	t.totalProgress( 0.999 );
-	t.totalProgress( 0 );*/
-	//t.totalProgress( 1 );
-	
-})();
+	setTimeout( function() {
+		//t.restart();
+	}, 600 );
+
+});
 
 (function() {
 	var circle = getCircleElement( 'c1' );
@@ -166,13 +155,13 @@ function getInputRange( params, onChange ) {
 	
 	circle.applyStyle();
 
-	var t = TweenMax.to( circle, 10.01, {
+	var t = TweenMax.to( circle, 1.01, {
 		ease: Linear.easeNone,
 		x: 500,
 		delay: 1,
 		repeat: 2,
-		repeatDelay: 1,
-		//yoyo: true,
+		//repeatDelay: 1,
+		yoyo: true,
 		onRepeat: function() {
 			console.log( 'TM repeat' );			
 		},
@@ -267,36 +256,77 @@ function getInputRange( params, onChange ) {
 	var spawnCircle = function( x, y, time ) {
 		var circle =  pool.pop();
 		if ( circle ) {
-			Tweenkey.tween( { scale: 0 }, time, {
-				to: { 
-					scale: [2, 0]
-				},
-				ease: 'BounceOut',
-				onUpdate: function( target ) {
-					var s = 'opacity: 1;';
-					s += 'transform: matrix(' + target.scale + ', 0, 0,' + target.scale + ',' +  x + ',' + y + ');';
-					circle.setAttribute( 'style', s );
-				},
-				onComplete: function() {
-					circle.setAttribute( 'style', 'opacity: 0' );
-					pool.push( circle );
-				}
-			} );
-		}
-	}
-
-	var bindEvents = function() {
-		document.onmousemove = function( e ) {
-			for( var i = 10; i--; ) {
-				spawnCircle( 
-					e.clientX + ( Math.random() - 0.5 ) * 60,
-					e.clientY + ( Math.random() - 0.5 ) * 60,
-					Math.random() + 0.5
-				);
+			if ( false ) {
+				TweenMax.fromTo( { scale: 0 }, time, {
+					scale: 2
+				}, {
+					scale: 0,
+					ease: Bounce.easeOut,
+					onUpdate: function( target ) {
+						target = this.target;
+						var s = 'opacity: 1;';
+						s += 'transform: matrix(' + target.scale + ', 0, 0,' + target.scale + ',' +  x + ',' + y + ');';
+						circle.setAttribute( 'style', s );
+					},
+					onComplete: function() {
+						circle.setAttribute( 'style', 'opacity: 0' );
+						pool.push( circle );
+					}
+				} );
+			} else {
+				Tweenkey.tween( { scale: 0 }, time, {
+					from: { 
+						scale: 2
+					},
+					to: { 
+						scale: 0
+					},
+					ease: 'BounceOut',
+					onUpdate: function( target ) {
+						var s = 'opacity: 1;';
+						s += 'transform: matrix(' + target.scale + ', 0, 0,' + target.scale + ',' +  x + ',' + y + ');';
+						circle.setAttribute( 'style', s );
+					},
+					onComplete: function() {
+						circle.setAttribute( 'style', 'opacity: 0' );
+						pool.push( circle );
+					}
+				} );
 			}
 		}
 	}
 
-	allocCircles( 1000 );
+	var avg = 0;
+	var samples = 0;
+	var spawn = function( x, y ) {
+		//Tweenkey.killAll();
+		//TweenMax.killAll();
+		var t = window.performance.now();
+		for( var i = 10; i--; ) {
+			spawnCircle( 
+				x + ( Math.random() - 0.5 ) * 100,
+				y + ( Math.random() - 0.5 ) * 100,
+				Math.random() + 0.5
+			);
+		}
+		var e = window.performance.now() - t;
+		samples = Math.min( samples + 1, 10 );
+		avg = avg * ( samples - 1 ) / samples + e / samples;
+		//console.log( avg );
+	}
+
+	var bindEvents = function() {
+		document.onmousemove = function( e ) {
+			spawn( e.clientX, e.clientY );
+		}
+	}
+
+	setInterval( function() {
+		var x = Math.random() * window.innerWidth;
+		var y = Math.random() * window.innerHeight;
+		//spawn( x, y );
+	}, 200 );
+
+	allocCircles( 2000 );
 	bindEvents();
-});
+})();
