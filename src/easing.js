@@ -1,13 +1,15 @@
+import * as Utils from './utils';
+import { bezierEase } from './bezier';
 
 var easeIn  = function( power ) { 
     return function( t ) { 
-        return m.pow( t, power )
+        return Math.pow( t, power )
     }
 };
 
 var easeOut = function( power ) { 
     return function( t ) {
-        return 1 - m.abs( m.pow( t - 1, power ) )
+        return 1 - Math.abs( Math.pow( t - 1, power ) )
     }
 };
 
@@ -61,13 +63,13 @@ var easeBounceInOut = function (t) {
 var easeElasticIn = function (t) {
     if (t === 0) { return 0; }
     if (t === 1) { return 1; }
-    return -m.pow(2, 10 * (t - 1)) * m.sin((t - 1.1) * 5 * m.PI);
+    return -Math.pow(2, 10 * (t - 1)) * Math.sin((t - 1.1) * 5 * Math.PI);
 };
 
 var easeElasticOut = function (t) {
     if (t === 0) { return 0; }
     if (t === 1) { return 1; }
-    return m.pow(2, -10 * t) * m.sin((t - 0.1) * 5 * m.PI) + 1;
+    return Math.pow(2, -10 * t) * Math.sin((t - 0.1) * 5 * Math.PI) + 1;
 };
 
 var easeElasticInOut = function (t) {
@@ -75,58 +77,54 @@ var easeElasticInOut = function (t) {
     if (t === 1) { return 1; }
     t *= 2;
     if (t < 1) {
-        return -0.5 * m.pow(2, 10 * (t - 1)) * m.sin((t - 1.1) * 5 * m.PI);
+        return -0.5 * Math.pow(2, 10 * (t - 1)) * Math.sin((t - 1.1) * 5 * Math.PI);
     }
-    return 0.5 * m.pow(2, -10 * (t - 1)) * m.sin((t - 1.1) * 5 * m.PI) + 1;
+    return 0.5 * Math.pow(2, -10 * (t - 1)) * Math.sin((t - 1.1) * 5 * Math.PI) + 1;
 };
 
 var easeCircIn = function (t) {
-    return 1 - m.sqrt(1 - t * t);
+    return 1 - Math.sqrt(1 - t * t);
 };
 
 var easeCircOut = function (t) {
-    return m.sqrt(1 - (--t * t));
+    return Math.sqrt(1 - (--t * t));
 };
 
 var easeCircInOut = function (t) {
     if ((t *= 2) < 1) {
-        return - 0.5 * (m.sqrt(1 - t * t) - 1);
+        return - 0.5 * (Math.sqrt(1 - t * t) - 1);
     }
-    return 0.5 * (m.sqrt(1 - (t -= 2) * t) + 1);
+    return 0.5 * (Math.sqrt(1 - (t -= 2) * t) + 1);
 };
 
 var easeSineIn = function (t) {
-    return 1 - m.cos(t * m.PI / 2);
+    return 1 - Math.cos(t * Math.PI / 2);
 };
 
 var easeSineOut = function (t) {
-	return m.sin(t * m.PI / 2);
+	return Math.sin(t * Math.PI / 2);
 };
 
 var easeSineInOut = function (t) {
-	return 0.5 * (1 - m.cos(m.PI * t));
+	return 0.5 * (1 - Math.cos(Math.PI * t));
 };
 
 var easeExpoIn = function (t) {
-	return t === 0 ? 0 : m.pow(1024, t - 1);
+	return t === 0 ? 0 : Math.pow(1024, t - 1);
 };
 
 var easeExpoOut = function (t) {
-	return t === 1 ? 1 : 1 - m.pow(2, - 10 * t);
+	return t === 1 ? 1 : 1 - Math.pow(2, - 10 * t);
 };
 
 var easeExpoInOut = function (t) {
     if (t === 0) return 0;
     if (t === 1) return 1;
     if ((t *= 2) < 1) {
-        return 0.5 * m.pow(1024, t - 1);
+        return 0.5 * Math.pow(1024, t - 1);
     }
-    return 0.5 * (- m.pow(2, - 10 * (t - 1)) + 2);
+    return 0.5 * (- Math.pow(2, - 10 * (t - 1)) + 2);
 };
-
-var lerpColor = function( progress, hexStart, hexEnd ) {
-    
-}
 
 var wrapEasing = function( fn ) {
     return function( progress, start, end ) {
@@ -134,7 +132,7 @@ var wrapEasing = function( fn ) {
     }
 };
 
-var easing = {
+export const Easings = {
     'linear'    : wrapEasing( easeInOut(1) ),
     'BackIn'    : wrapEasing( easeBackIn ),
     'BackOut'   : wrapEasing( easeBackOut ),
@@ -167,3 +165,18 @@ var easing = {
     'SineOut'   : wrapEasing( easeSineOut ),
     'SineInOut' : wrapEasing( easeSineInOut )
 };
+
+export function getEasing( val ) {
+    if ( Easings[ val ] ) {
+        return Easings[ val ];
+    } else if ( Utils.isArray( val ) && val.length == 4 ) {
+        return wrapEasing( bezierEase.apply( this, val ) );
+    } else {
+        if ( val != undefined ) {
+            var easingNames = Object.keys( Easings ).join(' | ');
+            console.warn( 'Invalid easing name: ' + val );
+            console.warn( 'Available easings: ' + easingNames );
+        }
+        return Easings.linear;
+    }
+}

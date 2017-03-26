@@ -1,5 +1,6 @@
+import * as utils from './utils';
 
-function plotTimeline( tl, label ) {
+export function plotTimeline( tl, label ) {
     tl._precompute( label );
     var computedItems = tl._computedItems;
     var def = Object.keys( tl._definitions );
@@ -26,7 +27,7 @@ function plotTimeline( tl, label ) {
     }
 
     var textPad = function( size, padChar, text ) {
-        var s = m.round( ( size - text.length ) / 2 );
+        var s = Math.round( ( size - text.length ) / 2 );
         var o = size - s - text.length;
         var left = charPad( s, padChar );
         var right = charPad( o, padChar );
@@ -44,7 +45,7 @@ function plotTimeline( tl, label ) {
     var pad2 = 'padding: 0px 0;';
 
     var totalDuration = tl._totalDuration;
-    var steps = m.round( totalDuration * 10 );
+    var steps = Math.round( totalDuration * 10 );
     var tlStr = [];
 
     // Print main label name and times
@@ -52,7 +53,7 @@ function plotTimeline( tl, label ) {
     tlStr.push( [ '', '\n\n' ] );
     tlStr.push( [ pad4 + bg, textPad( 14, ' ', tl._startLabel ) ] );
     tlStr.push( [ pad4, ' ' ] );
-    for( var i = 0; i < m.ceil( totalDuration ); i++ ) {
+    for( var i = 0; i < Math.ceil( totalDuration ); i++ ) {
         tlStr.push( [ pad4, i + 's' ] );
         tlStr.push( [ pad4, charPad( 9 - i.toString().length, '\u2009' ) ] );
     }
@@ -68,22 +69,22 @@ function plotTimeline( tl, label ) {
     bg = 'background: #D1C4E9; color:#B39DDB; padding-bottom: 1px;';
     tlStr.push( [ bg, '\u2009' ] );
     var mark = 0;
-    for( var i = 0; i < m.ceil( totalDuration * 2 ); i++ ) {
+    for( var i = 0; i < Math.ceil( totalDuration * 2 ); i++ ) {
         tlStr.push( [ bg,  mark % 1 ? '\u25AB' : '\u25BE' ] );
         tlStr.push( [ bg, charPad( 4, '\u2009' ) ] );
         mark += 0.5;
     }
-    logLine( _flatten( tlStr ) );
+    logLine( utils.flatten( tlStr ) );
 
     // Print each timeline item
     var colors = ['E91E63', 'F44336', '9C27B0', '673AB7', '3F51B5', '2196F3' ];
     for( var i = 0; i < computedItems.length; i++ ) {
         var item = computedItems[ i ];
-        var sp = charPad( m.round( item._start * 10 ), '\u2219' );
-        var tSize = m.max( 2, m.round( ( item._end - item._start ) * 10 ) ) ;
+        var sp = charPad( Math.round( item._start * 10 ), '\u2219' );
+        var tSize = Math.max( 2, Math.round( ( item._end - item._start ) * 10 ) ) ;
         bg = textPad( tSize, '\u2009', truncText( getLabel( item._obj ), tSize ) );
         var c = colors[ i % colors.length ];
-        var strings = _flatten( [
+        var strings = utils.flatten( [
             [ "padding: 2px 0; background: #C5E1A5; color: black;", textPad( 7, ' ', item._start.toFixed( 2 ) ) ],
             [ "padding: 2px 0; background: #FF5252; color: black;", textPad( 7, ' ', item._end.toFixed( 2 ) ) ],
             [ "background: white; color: #802929;", "\u2009\u2009" ],

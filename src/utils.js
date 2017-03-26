@@ -1,35 +1,40 @@
-var wnd = window || {};
-var PERFORMANCE = wnd.performance;
-var TYPE_FNC = ({}).toString;
-var DEC_FIX = 0.000001;
-var m = Math;
+import * as globals from './globals';
 
-var colorRE = new RegExp(/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i);
 
-function _getTypeCheck( typeStr, fastType ) {
+export const colorRE = new RegExp(/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i);
+
+const TYPE_FNC = ({}).toString;
+function getTypeCheck( typeStr, fastType ) {
     return function( obj ) {
         return fastType ? typeof obj === typeStr:
             TYPE_FNC.call( obj ) === typeStr;
     };
 }
-// Global object to be shared between modules
-var _isFunction = _getTypeCheck( 'function', true );
-var _isNumber = _getTypeCheck( 'number', true );
-var _isBoolean = _getTypeCheck( 'boolean', true );
-var _isString = _getTypeCheck( 'string', true );
-var _isArray = Array.isArray || _getTypeCheck( '[object Array]', false );
-var _isColor = function( str ) {
-    return colorRE.test( str );
+
+function minMax( obj, arr, key ) {
+    return obj.apply( m, arr.map( function( item ) {
+        return item[ key ];
+    } ) );
 }
-var _isObject = function( obj ) { 
-    return !!obj && obj.constructor === Object
+
+export const isFunction = getTypeCheck( 'function', true );
+export const isNumber = getTypeCheck( 'number', true );
+export const isBoolean = getTypeCheck( 'boolean', true );
+export const isString = getTypeCheck( 'string', true );
+export const isArray = Array.isArray || getTypeCheck( '[object Array]', false );
+export const isColor = ( str ) => {
+    return colorRE.test( str );
 };
 
-var _flatten = function( arr ) { 
+export const isObject = ( obj ) => {
+    return !!obj && obj.constructor === Object;
+};
+
+export const flatten = ( arr ) => { 
     return [].concat.apply( [], arr );
 };
 
-var _hexStrToRGB  = function( str ) {
+export const hexStrToRGB = function( str ) {
     var hex = parseInt( str.slice( 1 ), 16 );
     return [
         (( hex >> 16 ) & 0xFF) / 255,
@@ -38,35 +43,34 @@ var _hexStrToRGB  = function( str ) {
     ];
 };
 
-var _clamp = function( value, min, max ) {
-    return m.min( m.max( value, min ), max );
+export const clamp = function( value, min, max ) {
+    return Math.min( Math.max( value, min ), max );
 };
 
-var _now = function() {
-    return PERFORMANCE.now();
+export const now = function() {
+    return globals.PERFORMANCE.now();
 };
-var _extend = function( target, source, overwrite ) {
+
+export const extend = function( target, source, overwrite ) {
     for ( var key in source ) {
         ( overwrite || !( key in target ) ) && ( target[ key ] = source[ key ] );
     }
     return target;
 };
-var _noop = function() { return false; }
 
-var _roundDecimals = function( n ) {
-    return m.round( n * 1000 ) / 1000;
+export const noop = function() {
+    return false;
+};
+
+export const roundDecimals = function( n ) {
+    return Math.round( n * 1000 ) / 1000;
+};
+
+export const min = function( arr, key ) {
+    return minMax( Math.min, arr, key );
+};
+
+export const max = function( arr, key ) {
+    return minMax( Math.max, arr, key );
 }
 
-var _minMax = function( obj, arr, key ) {
-    return obj.apply( m, arr.map( function( item ) {
-        return item[ key ];
-    } ) );
-}
-
-var _min = function( arr, key ) {
-    return _minMax( m.min, arr, key );
-}
-
-var _max = function( arr, key ) {
-    return _minMax( m.max, arr, key );
-}

@@ -45,7 +45,6 @@ function getInputRange( params, onChange ) {
 	document.body.appendChild( input );
 }
 
-
 // TIMELINE TEST
 (function() {
 
@@ -110,7 +109,7 @@ function getInputRange( params, onChange ) {
 	var t = Tweenkey.tween( circle, 1, { 
 		from: { x: 0 },
 		to: { x: 500 },
-		delay: 1,
+		//delay: 1,
 		repeat: 2,
 		//inverted: true,
 		yoyo: true,
@@ -118,10 +117,7 @@ function getInputRange( params, onChange ) {
 		//autoStart: false,
 		onUpdate: function() {
 			//console.log( 'update:', circle.x );
-			
-
 			circle.applyStyle();
-
 			//console.log( 'update' );
 		},
 		onStart: function() {
@@ -143,11 +139,7 @@ function getInputRange( params, onChange ) {
 
 	t.timeScale( 1 );
 	
-	setTimeout( function() {
-		//t.restart();
-	}, 600 );
-
-});
+})();
 
 (function() {
 	var circle = getCircleElement( 'c1' );
@@ -329,4 +321,4 @@ function getInputRange( params, onChange ) {
 
 	allocCircles( 2000 );
 	bindEvents();
-})();
+});

@@ -1,52 +1,45 @@
-/*
- *  Copyright (c) 2016 Iván Juárez Núñez
- *  This code is under MIT license
- *  https://github.com/radixzz/Tweenkey
- */
-
-( function ( root, factory ) {
-  if( typeof define === "function" && define.amd ) {
-    define( [], factory );
-  } else if( typeof module === "object" && module.exports ) {
-    module.exports = ( root.Tweenkey = factory() );
-  } else {
-    root.Tweenkey = factory();
-  }
-}(this, function() {
-   'use strict';
+(function (global, factory) {
+	typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+	typeof define === 'function' && define.amd ? define(factory) :
+	(global.Tweenkey = factory());
+}(this, (function () { 'use strict';
 
 var wnd = window || {};
 var PERFORMANCE = wnd.performance;
-var TYPE_FNC = ({}).toString;
 var DEC_FIX = 0.000001;
-var m = Math;
 
 var colorRE = new RegExp(/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i);
 
-function _getTypeCheck( typeStr, fastType ) {
+var TYPE_FNC = ({}).toString;
+function getTypeCheck( typeStr, fastType ) {
     return function( obj ) {
         return fastType ? typeof obj === typeStr:
             TYPE_FNC.call( obj ) === typeStr;
     };
 }
-// Global object to be shared between modules
-var _isFunction = _getTypeCheck( 'function', true );
-var _isNumber = _getTypeCheck( 'number', true );
-var _isBoolean = _getTypeCheck( 'boolean', true );
-var _isString = _getTypeCheck( 'string', true );
-var _isArray = Array.isArray || _getTypeCheck( '[object Array]', false );
-var _isColor = function( str ) {
-    return colorRE.test( str );
+
+function minMax( obj, arr, key ) {
+    return obj.apply( m, arr.map( function( item ) {
+        return item[ key ];
+    } ) );
 }
-var _isObject = function( obj ) { 
-    return !!obj && obj.constructor === Object
+
+var isFunction = getTypeCheck( 'function', true );
+var isNumber = getTypeCheck( 'number', true );
+var isBoolean = getTypeCheck( 'boolean', true );
+var isString = getTypeCheck( 'string', true );
+var isArray = Array.isArray || getTypeCheck( '[object Array]', false );
+
+
+var isObject = function ( obj ) {
+    return !!obj && obj.constructor === Object;
 };
 
-var _flatten = function( arr ) { 
+var flatten = function ( arr ) { 
     return [].concat.apply( [], arr );
 };
 
-var _hexStrToRGB  = function( str ) {
+var hexStrToRGB = function( str ) {
     var hex = parseInt( str.slice( 1 ), 16 );
     return [
         (( hex >> 16 ) & 0xFF) / 255,
@@ -55,38 +48,187 @@ var _hexStrToRGB  = function( str ) {
     ];
 };
 
-var _clamp = function( value, min, max ) {
-    return m.min( m.max( value, min ), max );
+var clamp = function( value, min, max ) {
+    return Math.min( Math.max( value, min ), max );
 };
 
-var _now = function() {
+var now = function() {
     return PERFORMANCE.now();
 };
-var _extend = function( target, source, overwrite ) {
-    for ( var key in source ) {
-        ( overwrite || !( key in target ) ) && ( target[ key ] = source[ key ] );
-    }
-    return target;
+
+
+
+var noop = function() {
+    return false;
 };
-var _noop = function() { return false; }
 
-var _roundDecimals = function( n ) {
-    return m.round( n * 1000 ) / 1000;
+var roundDecimals = function( n ) {
+    return Math.round( n * 1000 ) / 1000;
+};
+
+var min = function( arr, key ) {
+    return minMax( Math.min, arr, key );
+};
+
+function initObjectCallbacks( obj, params ) {
+    var p = params || {};
+    obj._onStart      = isFunction( p.onStart ) ? p.onStart : noop;
+    obj._onUpdate     = isFunction( p.onUpdate ) ? p.onUpdate : noop;
+    obj._onComplete   = isFunction( p.onComplete ) ? p.onComplete : noop;
+    obj._onRepeat     = isFunction( p.onRepeat ) ? p.onRepeat : noop;
 }
 
-var _minMax = function( obj, arr, key ) {
-    return obj.apply( m, arr.map( function( item ) {
-        return item[ key ];
-    } ) );
+function initObjectRunnable( obj, params ) {
+    var p = params || {};
+    var delay = isNumber( p.delay ) ? Math.max( 0, p.delay ) : 0;
+    var repeatCount = isNumber( p.repeat ) ? p.repeat : 0;
+    
+    obj._queued       = false;
+    obj._totalDuration  = 0;
+    obj._inverted       = isBoolean( p.inverted ) ? p.inverted : false;
+    obj._direction      = 1;
+    obj._progress       = 0;
+    obj._totalProgress  = 0;
+    obj._elapsedTime    = 0;
+    obj._lastElapsedTime= 0;
+    obj._delay          = delay;
+    obj._yoyo           = isBoolean( p.yoyo ) ? p.yoyo : false;
+    // when repeat and yoyo are combined you can specify how many yoyo laps you want,
+    // by default if no repeat param is set it repeats forever (-1)
+    if ( isNumber( p.repeat ) === false && obj._yoyo ) {
+        repeatCount = -1;
+    }
+    obj._repeat         = repeatCount;
+    obj._infinite       = ( obj._yoyo === true && obj._repeat === -1 ) || obj._repeat === -1;
+    obj._repeatDelay    = isNumber( p.repeatDelay ) ? Math.max( 0, p.repeatDelay ) : 0;
+    obj._timeScale      = isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
+    obj._running        = isBoolean( p.autoStart ) ? p.autoStart : true;
+    obj._params         = p;
 }
 
-var _min = function( arr, key ) {
-    return _minMax( m.min, arr, key );
+/*
+ * Increments a Tween or Timeline step
+ * takes into account the current timeScale
+ */
+function applyStep( obj, dt ) {
+    dt *= obj._direction;
+    var time = obj._elapsedTime + dt * obj._timeScale;
+    seek$1( obj, time, true, true );
 }
 
-var _max = function( arr, key ) {
-    return _minMax( m.max, arr, key );
+function notifyOnUpdate( obj ) {
+    if ( obj._elapsedTime > obj._delay ) {
+        obj._onUpdate.call( obj, obj._target );
+    }
 }
+
+function notifyStart( obj ) {
+        if ( obj._elapsedTime > obj._delay ) {
+            var lastElapsed = Math.max( 0, obj._lastElapsedTime - obj._delay );
+            if ( lastElapsed === 0 ) {
+            obj._onStart.call( obj._target || obj );
+        }
+    }
+}
+
+function notifyOnComplete( obj ) {
+    if ( obj._elapsedTime > obj._delay &&
+        obj._totalDuration === roundDecimals( obj._elapsedTime )  &&
+        ! obj._infinite ) {
+            obj._onComplete.call( obj, obj._target );
+        }
+}
+
+function notifyOnRepeat( obj ) {
+    if ( obj._elapsedTime > obj._delay &&
+        ( obj._repeat > 0 || obj._yoyo ) ) {
+        var delay = obj._delay;
+        var d = obj._duration + obj._repeatDelay;
+        var a = ( obj._elapsedTime - delay ) / d;
+        var b = ( obj._lastElapsedTime - delay ) / d;
+        var repeatCount = ~b - ~a;
+        var tail = a > b ? b : a;
+        if ( repeatCount !== 0 && 
+            ( obj._infinite || Math.abs( tail ) < obj._repeat ) ) {
+            obj._onRepeat.call( obj, obj._target );
+        }
+    }
+}
+
+/*
+ * Updates a tween or timeline state.
+ */
+function updateState( obj ) {
+    if ( ! obj._infinite && obj._totalProgress === 1 ) {
+        obj.clear();
+    }
+}
+
+function seekProgress( obj, progress, global, accountForDelay ) {
+    progress = clamp( progress, 0, 1 );
+    var delayJump = accountForDelay ? 0 : obj._delay;
+    var duration = 0;
+    if ( global ) {
+        duration = obj._totalDuration;
+    } else {
+        duration = obj._duration + obj._repeatDelay;
+        // Normalize the duration to treat following calcs
+        // with the same delay jump.
+        duration += obj._delay;
+    }
+    
+    var time = progress * ( duration - delayJump );
+    seek$1( obj, time + delayJump, global );
+}
+
+// sets tweens and timelines to a certain time
+function seek$1( obj, time ) {
+    time = Math.max( 0, time );
+    
+    
+
+    obj._lastElapsedTime = obj._elapsedTime;
+    obj._elapsedTime = time;
+    
+    if ( obj._elapsedTime > obj._totalDuration ) {
+        
+        if ( ! obj._infinite ) {
+            time = Math.min( obj._totalDuration, time );
+            obj._elapsedTime = time;
+        }
+
+        time = ( time - obj._delay - DEC_FIX ) % obj._totalDuration + obj._delay;
+    }
+    
+    obj._totalProgress = roundDecimals( time / obj._totalDuration );
+
+    if ( time > obj._delay ) {
+        var time = time - obj._delay;
+        var local = obj._duration + DEC_FIX;
+        var elapsed = time % ( local + obj._repeatDelay );
+        if ( elapsed <= local ) {
+            obj._progress = roundDecimals( ( elapsed % local ) / local );
+        } else {
+            obj._progress = 1;
+        }
+    } else {
+        obj._progress = 0;
+    }
+
+    if ( obj._inverted ) {
+        obj._progress = 1 - obj._progress;
+    }
+
+//    console.log( obj._progress );
+
+    return;
+    /*console.log(
+        'local:', obj._progress,
+        'global:', obj._totalProgress,
+        'elapsed time:', obj._elapsedTime
+    );*/
+}
+
 /**
  * https://github.com/gre/bezier-easing
  * BezierEasing - use bezier curve for transition easing function
@@ -195,13 +337,13 @@ var bezierEase = (function () {
 
 var easeIn  = function( power ) { 
     return function( t ) { 
-        return m.pow( t, power )
+        return Math.pow( t, power )
     }
 };
 
 var easeOut = function( power ) { 
     return function( t ) {
-        return 1 - m.abs( m.pow( t - 1, power ) )
+        return 1 - Math.abs( Math.pow( t - 1, power ) )
     }
 };
 
@@ -255,13 +397,13 @@ var easeBounceInOut = function (t) {
 var easeElasticIn = function (t) {
     if (t === 0) { return 0; }
     if (t === 1) { return 1; }
-    return -m.pow(2, 10 * (t - 1)) * m.sin((t - 1.1) * 5 * m.PI);
+    return -Math.pow(2, 10 * (t - 1)) * Math.sin((t - 1.1) * 5 * Math.PI);
 };
 
 var easeElasticOut = function (t) {
     if (t === 0) { return 0; }
     if (t === 1) { return 1; }
-    return m.pow(2, -10 * t) * m.sin((t - 0.1) * 5 * m.PI) + 1;
+    return Math.pow(2, -10 * t) * Math.sin((t - 0.1) * 5 * Math.PI) + 1;
 };
 
 var easeElasticInOut = function (t) {
@@ -269,58 +411,54 @@ var easeElasticInOut = function (t) {
     if (t === 1) { return 1; }
     t *= 2;
     if (t < 1) {
-        return -0.5 * m.pow(2, 10 * (t - 1)) * m.sin((t - 1.1) * 5 * m.PI);
+        return -0.5 * Math.pow(2, 10 * (t - 1)) * Math.sin((t - 1.1) * 5 * Math.PI);
     }
-    return 0.5 * m.pow(2, -10 * (t - 1)) * m.sin((t - 1.1) * 5 * m.PI) + 1;
+    return 0.5 * Math.pow(2, -10 * (t - 1)) * Math.sin((t - 1.1) * 5 * Math.PI) + 1;
 };
 
 var easeCircIn = function (t) {
-    return 1 - m.sqrt(1 - t * t);
+    return 1 - Math.sqrt(1 - t * t);
 };
 
 var easeCircOut = function (t) {
-    return m.sqrt(1 - (--t * t));
+    return Math.sqrt(1 - (--t * t));
 };
 
 var easeCircInOut = function (t) {
     if ((t *= 2) < 1) {
-        return - 0.5 * (m.sqrt(1 - t * t) - 1);
+        return - 0.5 * (Math.sqrt(1 - t * t) - 1);
     }
-    return 0.5 * (m.sqrt(1 - (t -= 2) * t) + 1);
+    return 0.5 * (Math.sqrt(1 - (t -= 2) * t) + 1);
 };
 
 var easeSineIn = function (t) {
-    return 1 - m.cos(t * m.PI / 2);
+    return 1 - Math.cos(t * Math.PI / 2);
 };
 
 var easeSineOut = function (t) {
-	return m.sin(t * m.PI / 2);
+	return Math.sin(t * Math.PI / 2);
 };
 
 var easeSineInOut = function (t) {
-	return 0.5 * (1 - m.cos(m.PI * t));
+	return 0.5 * (1 - Math.cos(Math.PI * t));
 };
 
 var easeExpoIn = function (t) {
-	return t === 0 ? 0 : m.pow(1024, t - 1);
+	return t === 0 ? 0 : Math.pow(1024, t - 1);
 };
 
 var easeExpoOut = function (t) {
-	return t === 1 ? 1 : 1 - m.pow(2, - 10 * t);
+	return t === 1 ? 1 : 1 - Math.pow(2, - 10 * t);
 };
 
 var easeExpoInOut = function (t) {
-    if (t === 0) return 0;
-    if (t === 1) return 1;
+    if (t === 0) { return 0; }
+    if (t === 1) { return 1; }
     if ((t *= 2) < 1) {
-        return 0.5 * m.pow(1024, t - 1);
+        return 0.5 * Math.pow(1024, t - 1);
     }
-    return 0.5 * (- m.pow(2, - 10 * (t - 1)) + 2);
+    return 0.5 * (- Math.pow(2, - 10 * (t - 1)) + 2);
 };
-
-var lerpColor = function( progress, hexStart, hexEnd ) {
-    
-}
 
 var wrapEasing = function( fn ) {
     return function( progress, start, end ) {
@@ -328,7 +466,7 @@ var wrapEasing = function( fn ) {
     }
 };
 
-var easing = {
+var Easings = {
     'linear'    : wrapEasing( easeInOut(1) ),
     'BackIn'    : wrapEasing( easeBackIn ),
     'BackOut'   : wrapEasing( easeBackOut ),
@@ -362,233 +500,18 @@ var easing = {
     'SineInOut' : wrapEasing( easeSineInOut )
 };
 
-var rAF, cAF;
-
-// borrowed from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
-(function shimAnimationFrame() {
-    var vendors, a, b, c, idx, now, dt, id;
-    var then = 0;
-
-    vendors = [ 'ms', 'moz', 'webkit', 'o' ];
-    a = 'AnimationFrame';
-    b = 'request' + a;
-    c = 'cancel' + a;
-
-    rAF = wnd[ b ];
-    cAF = wnd[ c ];
-
-    for ( var idx = vendors.lenght; !rAF && idx--; ) {
-        rAF = wnd[ vendors[ idx ] + 'Request' + a ];
-        cAF = wnd[ vendors[ idx ] + 'Cancel' + a ];
-    };
-
-    rAF = rAF || function( callback ) {
-        now = _now();
-        dt = m.max( 0, 16 - ( now - then ) );
-        id = setTimeout(function() {
-            callback( now + dt );
-        }, dt );
-        then = now + dt;
-        return id;
-    };
-
-    cAF = cAF || function( id ) {
-        clearTimeout( id );
-    };
-})();
-
-function initObjectCallbacks( obj, params ) {
-    var p = params || {};
-    obj._onStart      = _isFunction( p.onStart ) ? p.onStart : _noop;
-    obj._onUpdate     = _isFunction( p.onUpdate ) ? p.onUpdate : _noop;
-    obj._onComplete   = _isFunction( p.onComplete ) ? p.onComplete : _noop;
-    obj._onRepeat     = _isFunction( p.onRepeat ) ? p.onRepeat : _noop;
-}
-
-function initObjectRunnable( obj, params ) {
-    var p = params || {};
-    var delay = _isNumber( p.delay ) ? m.max( 0, p.delay ) : 0;
-    var repeatCount = _isNumber( p.repeat ) ? p.repeat : 0;
-    
-    obj._queued       = false;
-    obj._totalDuration  = 0;
-    obj._inverted       = _isBoolean( p.inverted ) ? p.inverted : false;
-    obj._direction      = 1;
-    obj._progress       = 0;
-    obj._totalProgress  = 0;
-    obj._elapsedTime    = 0;
-    obj._lastElapsedTime= 0;
-    obj._delay          = delay;
-    obj._yoyo           = _isBoolean( p.yoyo ) ? p.yoyo : false;
-    // when repeat and yoyo are combined you can specify how many yoyo laps you want,
-    // by default if no repeat param is set it repeats forever (-1)
-    if ( _isNumber( p.repeat ) === false && obj._yoyo ) {
-        repeatCount = -1;
-    }
-    obj._repeat         = repeatCount;
-    obj._infinite       = ( obj._yoyo === true && obj._repeat === -1 ) || obj._repeat === -1;
-    obj._repeatDelay    = _isNumber( p.repeatDelay ) ? m.max( 0, p.repeatDelay ) : 0;
-    obj._timeScale      = _isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
-    obj._running        = _isBoolean( p.autoStart ) ? p.autoStart : true;
-    obj._params         = p;
-}
-
-/*
- * Increments a Tween or Timeline step
- * takes into account the current timeScale
- */
-function applyStep( obj, dt ) {
-    dt *= obj._direction;
-    var time = obj._elapsedTime + dt * obj._timeScale;
-    seek( obj, time, true, true );
-}
-
-function notifyOnUpdate( obj ) {
-    if ( obj._elapsedTime > obj._delay ) {
-        obj._onUpdate.call( obj, obj._target );
-    }
-}
-
-function notifyStart( obj ) {
-        if ( obj._elapsedTime > obj._delay ) {
-            var lastElapsed = m.max( 0, obj._lastElapsedTime - obj._delay );
-            if ( lastElapsed === 0 ) {
-            obj._onStart.call( obj._target || obj );
-        }
-    }
-}
-
-function notifyOnComplete( obj ) {
-    if ( obj._elapsedTime > obj._delay &&
-        obj._totalDuration === _roundDecimals( obj._elapsedTime )  &&
-        ! obj._infinite ) {
-            obj._onComplete.call( obj, obj._target );
-        }
-}
-
-function notifyOnRepeat( obj ) {
-    if ( obj._elapsedTime > obj._delay &&
-        ( obj._repeat > 0 || obj._yoyo ) ) {
-        var delay = obj._delay;
-        var d = obj._duration + obj._repeatDelay;
-        var a = ( obj._elapsedTime - delay ) / d;
-        var b = ( obj._lastElapsedTime - delay ) / d;
-        var repeatCount = ~b - ~a;
-        var tail = a > b ? b : a;
-        if ( repeatCount !== 0 && 
-            ( obj._infinite || m.abs( tail ) < obj._repeat ) ) {
-            obj._onRepeat.call( obj, obj._target );
-        }
-    }
-}
-
-/*
- * Updates a tween or timeline state.
- */
-function updateState( obj ) {
-    if ( ! obj._infinite && obj._totalProgress === 1 ) {
-        obj.clear();
-    }
-}
-
-function seekProgress( obj, progress, global, accountForDelay ) {
-    progress = _clamp( progress, 0, 1 );
-    var delayJump = accountForDelay ? 0 : obj._delay;
-    var duration = 0;
-    if ( global ) {
-        duration = obj._totalDuration;
+function getEasing( val ) {
+    if ( Easings[ val ] ) {
+        return Easings[ val ];
+    } else if ( isArray( val ) && val.length == 4 ) {
+        return wrapEasing( bezierEase.apply( this, val ) );
     } else {
-        duration = obj._duration + obj._repeatDelay;
-        // Normalize the duration to treat following calcs
-        // with the same delay jump.
-        duration += obj._delay;
-    }
-    
-    var time = progress * ( duration - delayJump ) ;
-    seek( obj, time + delayJump, global );
-}
-
-// sets tweens and timelines to a certain time
-function seek( obj, time ) {
-    time = m.max( 0, time );
-    
-    
-
-    obj._lastElapsedTime = obj._elapsedTime;
-    obj._elapsedTime = time;
-    
-    if ( obj._elapsedTime > obj._totalDuration ) {
-        
-        if ( ! obj._infinite ) {
-            time = m.min( obj._totalDuration, time );
-            obj._elapsedTime = time;
+        if ( val != undefined ) {
+            var easingNames = Object.keys( Easings ).join(' | ');
+            console.warn( 'Invalid easing name: ' + val );
+            console.warn( 'Available easings: ' + easingNames );
         }
-
-        time = ( time - obj._delay - DEC_FIX ) % obj._totalDuration + obj._delay;
-    }
-    
-    obj._totalProgress = _roundDecimals( time / obj._totalDuration );
-
-    if ( time > obj._delay ) {
-        var time = time - obj._delay;
-        var local = obj._duration + DEC_FIX;
-        var elapsed = time % ( local + obj._repeatDelay );
-        if ( elapsed <= local ) {
-            obj._progress = _roundDecimals( ( elapsed % local ) / local );
-        } else {
-            obj._progress = 1;
-        }
-    } else {
-        obj._progress = 0;
-    }
-
-    if ( obj._inverted ) {
-        obj._progress = 1 - obj._progress;
-    }
-
-//    console.log( obj._progress );
-
-    return;
-    /*console.log(
-        'local:', obj._progress,
-        'global:', obj._totalProgress,
-        'elapsed time:', obj._elapsedTime
-    );*/
-}
-
-// TODO: add a sleep tweens layer to avoid main tweens array from getting too big
-var tweens = [];
-var timelines = [];
-var tickers = [];
-var mainTicker;
-var sleeping = true;
-var cleanupDirty = false;
-
-var PROP_NUMBER = 0;
-var PROP_ARRAY = 1;
-var PROP_COLOR = 2;
-var PROP_WAYPOINTS = 3;
-var PROP_INVALID = 4;
-
-var TL_ITEM_TWEEN = 0;
-var TL_ITEM_CALLBACK = 1;
-var TL_ITEM_LINE_SYNC = 2;
-var TL_ITEM_LINE_ASYNC = 3
-var TL_ITEM_DELAY = 4;
-var TL_ITEM_LABEL = 5;
-var TL_ITEM_INVALID = 6;
-
-// Flat dictionary to track all objects properties.
-// Id's are formed from objectId + propertyName
-var propDict = {};
-var propDictIdx = 1;
-
-function wakeup() {
-    if ( sleeping === true ) {
-        sleeping = false;
-        setTimeout( function() {
-            onFrame();
-        }, 1 );
+        return Easings.linear;
     }
 }
 
@@ -598,93 +521,7 @@ var PROP_COLOR = 2;
 var PROP_WAYPOINTS = 3;
 var PROP_INVALID = 4;
 
-function Tween() {}
-
-Tween.prototype = {
-    delay: function( seconds ) {
-        this._delayLeft = this._delay = seconds;
-        return this;
-    },
-    progress: function( progress, accountForDelay ) {
-        queueTween( this );
-        seekProgress( this, progress, true, accountForDelay );
-        tweenTick( this, 0 );
-        return this;
-    },
-    time: function( seconds, accountForDelay ) {
-        seek( this, seconds, accountForDelay, true );
-        return this;
-    },
-    render: function() {
-        overrideDictionaryProperties( this );
-        updateTweenProperties( this );
-    },
-    restart: function( accountForDelay, immediateRender ) {
-
-        // default for accountForDelay is false
-        accountForDelay = _isBoolean( accountForDelay ) ? accountForDelay : false;
-        
-        // default for immediateRender is true
-        immediateRender = _isBoolean( immediateRender ) ? immediateRender : true;
-        
-        this._lastElapsedTime = 0;
-        this._elapsedTime = 0;
-        this._progress = 0;
-        this._totalProgress = 0;
-        this._running = true;
-        this._direction = 1;
-        this.resume();
-
-        if ( immediateRender ) {
-            this.render();
-        }
-
-        return this;
-    },
-    reverse: function() {
-        this._direction *= -1;
-        return this;
-    },
-    timeScale: function( scale ) {
-        if ( _isNumber( scale ) && scale > 0 ) {
-            this._timeScale = scale;
-        }
-        return this;
-    },
-    clear: function() {
-        if ( arguments.length > 0 ) {
-
-            // fix: avoid optimization bailout
-            var args = [];
-            for ( var i = 0; i < arguments.length; ++i ) {
-                args[ i ] = arguments[ i ];
-            }
-            disableProperties( this, args );
-
-        } else {
-            this._running = false;
-            disableProperties( this );
-            this._firstNode = undefined;
-        }
-        cleanupDirty = true;
-        return this;
-    },
-    pause: function() {
-        this._running = false;
-        cleanupDirty = true;
-        return this;
-    },
-    resume: function() {
-        this._running = true;
-        queueTween( this );
-        return this;
-    },
-    toString: function() {
-        return '[object Tween]';
-    }
-};
-
-function TweenProperty( id, name, target, origProps, targetProps ) {
+var TweenProperty = function TweenProperty( id, name, target, origProps, targetProps ) {
     this.id = id;
     this.name = name;
     this.target = target;
@@ -692,42 +529,17 @@ function TweenProperty( id, name, target, origProps, targetProps ) {
     this.targetProps = targetProps;
     this.enabled = true;
     this.length = 0;
-}
+};
 
 TweenProperty.prototype = {
     _expandArrayProperties: function( o, t ) {
         var tp = this.target[ this.name ];
-        var len = m.max( o.length, t.length );
+        var len = Math.max( o.length, t.length );
         for ( var i = 0; i < len; i++ ) {
             o[ i ] = o[ i ] != undefined ? o[ i ] : tp[ i ];
             t[ i ] = t[ i ] != undefined ? t[ i ] : tp[ i ];
         }
         this.length = len;
-    },
-    _getPropertyType: function( s, e, t ) {
-        if ( _isNumber( s ) &&
-         _isNumber( e ) &&
-         _isNumber( t ) ) {
-            return PROP_NUMBER;
-        } else if (
-            colorRE.test( s ) &&
-            colorRE.test( e ) &&
-            colorRE.test( t ) ) {
-                return PROP_COLOR;
-        } else if ( 
-            _isArray( s ) &&
-            _isArray( e ) &&
-            _isArray( t ) ) {
-                return PROP_ARRAY;
-        } else if (
-            _isNumber( s ) &&
-            _isArray( e ) &&
-            _isNumber( t )
-        ) {
-            return PROP_WAYPOINTS;
-        } else {
-            return PROP_INVALID;
-        }
     },
     refresh: function() {
         this.start = this.origProps[ this.name ];
@@ -748,11 +560,167 @@ TweenProperty.prototype = {
         } else if ( this.type == PROP_WAYPOINTS ) {
             this.waypoints = [ this.start ].concat( this.end );
         } else if ( this.type == PROP_COLOR ) {
-            this.colorStart = _hexStrToRGB( this.start );
-            this.colorEnd = _hexStrToRGB( this.end );
+            this.colorStart = hexStrToRGB( this.start );
+            this.colorEnd = hexStrToRGB( this.end );
         }
     }
 };
+
+function getPropertyType( s, e, t ) {
+    if ( isNumber( s ) &&
+         isNumber( e ) &&
+         isNumber( t ) ) {
+            return PROP_NUMBER;
+    } else if (
+        colorRE.test( s ) &&
+        colorRE.test( t ) &&
+        colorRE.test( e ) ) {
+            return PROP_COLOR;
+    } else if ( 
+        isArray( s ) &&
+        isArray( e ) &&
+        isArray( t ) ) {
+            return PROP_ARRAY;
+    } else if (
+        isNumber( s ) &&
+        isArray( e ) &&
+        isNumber( t )
+    ) {
+        return PROP_WAYPOINTS;
+    } else {
+        return PROP_INVALID;
+    }
+}
+
+// Flat dictionary to track all objects properties.
+// Id's are formed from objectId + propertyName
+var propDict = {};
+var propDictIdx = 1;
+
+var Tween$1 = function Tween( onQueue, onDequeue ) {
+    this._onQueue = onQueue;
+    this._onDequeue = onDequeue;
+};
+
+Tween$1.prototype = {
+    delay: function( seconds ) {
+        this._delayLeft = this._delay = seconds;
+        return this;
+    },
+    progress: function( progress, accountForDelay ) {
+        this._onQueue( this );
+        seekProgress( this, progress, true, accountForDelay );
+        tweenTick( this, 0 );
+        return this;
+    },
+    time: function( seconds, accountForDelay ) {
+        seek$1( this, seconds, accountForDelay, true );
+        return this;
+    },
+    render: function() {
+        overrideDictionaryProperties( this );
+        updateTweenProperties( this );
+    },
+    restart: function( accountForDelay, immediateRender ) {
+
+        // default for accountForDelay is false
+        accountForDelay = isBoolean( accountForDelay ) ? accountForDelay : false;
+        
+        // default for immediateRender is true
+        immediateRender = isBoolean( immediateRender ) ? immediateRender : true;
+        
+        this._lastElapsedTime = 0;
+        this._elapsedTime = 0;
+        this._progress = 0;
+        this._totalProgress = 0;
+        this._running = true;
+        this._direction = 1;
+        this.resume();
+
+        if ( immediateRender ) {
+            this.render();
+        }
+
+        return this;
+    },
+    reverse: function() {
+        this._direction *= -1;
+        return this;
+    },
+    timeScale: function( scale ) {
+        if ( isNumber( scale ) && scale > 0 ) {
+            this._timeScale = scale;
+        }
+        return this;
+    },
+    clear: function() {
+        var arguments$1 = arguments;
+
+        if ( arguments.length > 0 ) {
+
+            // fix: avoid optimization bailout
+            var args = [];
+            for ( var i = 0; i < arguments.length; ++i ) {
+                args[ i ] = arguments$1[ i ];
+            }
+            disableProperties( this, args );
+
+        } else {
+            this._running = false;
+            disableProperties( this );
+            this._firstNode = undefined;
+        }
+        this._onDequeue( this );
+        return this;
+    },
+    pause: function() {
+        this._running = false;
+        this._onDequeue( this );
+        return this;
+    },
+    resume: function() {
+        this._running = true;
+        this._onQueue( this );
+        return this;
+    }
+};
+
+/*
+* Sync values between object properties and target properties
+*/
+function syncTargetProperties( tween ) {
+    var currentNode = tween._firstNode;
+    do {
+        for ( var idx = currentNode.properties.length; idx--; ) {
+            currentNode.properties[ idx ].refresh();
+        }
+    } while ( currentNode = currentNode.next );
+}
+
+/*
+* Disables only <enabled> properties of a tween and removes them from dictionary.
+* Keys param specifies an array containing which properties to disable, by default
+* if no keys param is provided all enabled properties will be disabled.
+*/
+function disableProperties( tween, keys ) {
+
+    var all = ! isArray( keys );
+    var currentNode = tween._firstNode;
+
+    do {
+        for ( var idx = currentNode.properties.length; idx--; ) {
+
+            var property = currentNode.properties[ idx ];
+
+            if ( property.enabled && ( all || keys.indexOf(property.name) > -1 ) ) {
+                property.enabled = false;
+                delete propDict[ property.id ];
+            }
+
+        }
+    } while ( currentNode = currentNode.next );
+}
+
 
 /*
 * Reassigns all <enabled> properties from tween targets into the dictionary,
@@ -779,41 +747,6 @@ function overrideDictionaryProperties( tween ) {
     } while ( currentNode = currentNode.next );
 }
 
-/*
-* Sync values between object properties and target properties
-*/
-function syncTargetProperties( tween ) {
-    var currentNode = tween._firstNode;
-    do {
-        for ( var idx = currentNode.properties.length; idx--; ) {
-            currentNode.properties[ idx ].refresh();
-        }
-    } while ( currentNode = currentNode.next );
-}
-
-/*
-* Disables only <enabled> properties of a tween and removes them from dictionary.
-* Keys param specifies an array containing which properties to disable, by default
-* if no keys param is provided all enabled properties will be disabled.
-*/
-function disableProperties( tween, keys ) {
-
-    var all = ! _isArray( keys );
-    var currentNode = tween._firstNode;
-
-    do {
-        for ( var idx = currentNode.properties.length; idx--; ) {
-
-            var property = currentNode.properties[ idx ];
-
-            if ( property.enabled && ( all || keys.indexOf(property.name) > -1 ) ) {
-                property.enabled = false;
-                delete propDict[ property.id ];
-            }
-
-        }
-    } while ( currentNode = currentNode.next );
-}
 
 
 function getLocalProgress( obj ) {
@@ -821,8 +754,8 @@ function getLocalProgress( obj ) {
         // when yoyo is active we need to invert
         // the progress on each odd lap
         var local = obj._duration + obj._repeatDelay + DEC_FIX;
-        var elapsed = m.max( 0, obj._elapsedTime - obj._delay );
-        var lapOdd = m.ceil( elapsed / local ) % 2 === 0;
+        var elapsed = Math.max( 0, obj._elapsedTime - obj._delay );
+        var lapOdd = Math.ceil( elapsed / local ) % 2 === 0;
         return lapOdd ? 1 - obj._progress : obj._progress;
     } else {
         return obj._progress;
@@ -864,7 +797,7 @@ function updateTweenProperties( tween ) {
                     case PROP_WAYPOINTS:
                         var len = p.waypoints.length - 1;
                         var a = len * progress;
-                        var b = m.floor( a );
+                        var b = Math.floor( a );
                         var val = tween._ease(
                             a - b,
                             p.waypoints[ b ],
@@ -899,14 +832,14 @@ function updateTweenProperties( tween ) {
 }
 
 
-
 /*
 * Builds a linked list of all objects and properties to iterate
 * It stores the first linked object in the current tween
 */
-function resetTargetProperties( tween, targetProperties, originProperties ) {
-
-    var targets = _isArray( tween._target ) ? tween._target : [ tween._target ];
+function resetTargetProperties( tween ) {
+    var targetProperties = tween._to;
+    var originProperties = tween._from;
+    var targets = isArray( tween._target ) ? tween._target : [ tween._target ];
     var prevNode, firstNode;
 
     // merge keys of targetProperties and originProperties without duplicates
@@ -961,258 +894,45 @@ function resetTargetProperties( tween, targetProperties, originProperties ) {
     tween._firstNode = firstNode;
 }
 
-function Ticker( params ) {
-    params = params || {};
-    this._onTick = _isFunction( params.onTick ) ? params.onTick : _noop;
-    this.setFPS( params.fps );
-    this.resume();
-}
-
-Ticker.prototype = {
-    pause: function() {
-        this._running = false;
-        return this;
-    },
-    resume: function() {
-        this._then = _now();
-        this._running = true;
-        queueTicker( this );
-        return this;
-    },
-    tick: function( time ) {
-        var delta = time - this._then;
-
-        if ( delta > this._fpsStep ) {
-            var drop = delta % this._fpsStep;
-            this._then = time - drop;
-            this._onTick( m.min( delta - drop, this._fpsStep * 4 ) / 1000 );
-        }
-
-        return this;
-    },
-    setFPS: function( fps ) {
-        this.fps = _isNumber( fps ) && fps > 0 ? fps : 60;
-        this._fpsStep = 1000 / this.fps;
-    },
-    toString: function() {
-        return '[object Ticker]';
-    }
+function initTweenProperties( tween, target, duration, params ) {
+    tween._target       = target;
+    tween._syncNextTick = true;
+    tween._ease         = getEasing( params.ease );
+    tween._from         = isObject( params.from ) ? params.from : {};
+    tween._to           = isObject( params.to ) ? params.to: {};
+    tween._duration     = isNumber( duration ) ? Math.max( 0, duration ) : 0;
 }
 
 
-/*
-* Disables only <enabled> properties of a tween and removes them from dictionary.
-* Keys param specifies an array containing which properties to disable, by default
-* if no keys param is provided all enabled properties will be disabled.
-*/
-function disableProperties( tween, keys ) {
-
-    var all = ! _isArray( keys );
-    var currentNode = tween._firstNode;
-
-    do {
-        for ( var idx = currentNode.properties.length; idx--; ) {
-
-            var property = currentNode.properties[ idx ];
-
-            if ( property.enabled && ( all || keys.indexOf(property.name) > -1 ) ) {
-                property.enabled = false;
-                delete propDict[ property.id ];
-            }
-
-        }
-    } while ( currentNode = currentNode.next );
-}
-
-/*
-* Reassigns all <enabled> properties from tween targets into the dictionary,
-* if a property exists it will disable it prior deletion
-*/
-function overrideDictionaryProperties( tween ) {
-    var currentNode = tween._firstNode;
-
-    do {
-        for ( var idx = currentNode.properties.length; idx--; ) {
-            var property = currentNode.properties[ idx ];
-            if ( property.enabled ) {
-                
-                // If there is a running property disable it
-                // and remove it from dictionary
-                if ( propDict[ property.id ] && propDict[ property.id ] !== property) {
-                    propDict[ property.id ].enabled = false;
-                    delete propDict[ property.id ];
-                }
-
-                propDict[ property.id ] = property;
-            }
-        }
-    } while ( currentNode = currentNode.next );
-}
-
-/*
-* Sync values between object properties and target properties
-*/
-function syncTargetProperties( tween ) {
-    var currentNode = tween._firstNode;
-    do {
-        for ( var idx = currentNode.properties.length; idx--; ) {
-            currentNode.properties[ idx ].refresh();
-        }
-    } while ( currentNode = currentNode.next );
-}
-
-function getPropertyType( s, e, t ) {
-
-    if ( _isNumber( s ) &&
-         _isNumber( e ) &&
-         _isNumber( t ) ) {
-            return PROP_NUMBER;
-    } else if (
-        colorRE.test( s ) &&
-        colorRE.test( e ) &&
-        colorRE.test( t ) ) {
-            return PROP_COLOR;
-    } else if ( 
-        _isArray( s ) &&
-        _isArray( e ) &&
-        _isArray( t ) ) {
-            return PROP_ARRAY;
-    } else if (
-        _isNumber( s ) &&
-        _isArray( e ) &&
-        _isNumber( t )
-    ) {
-        return PROP_WAYPOINTS;
+function setTweenTotalDuration( tween ) {
+    var total = 0;
+    var tweenDuration = tween._duration;
+    var repeatDelay = tween._repeatDelay;
+    var delay = tween._delay;
+    
+    if ( tween._infinite ) {
+        // if is an infinite loop then just 
+        // take two laps as the total duration
+        total = tween._duration * 2;
+        total += delay + repeatDelay * 2;
+    } else if ( tween._repeat > 0 ) {
+        var repeatDuration = ( tweenDuration + repeatDelay ) * tween._repeat;
+        total = tweenDuration + repeatDuration + delay;
     } else {
-        return PROP_INVALID;
+        total = tweenDuration + delay;
     }
+
+    tween._totalDuration = total;
 }
 
-function TweenProperty( id, name, target, origProps, targetProps ) {
-    this.id = id;
-    this.name = name;
-    this.target = target;
-    this.origProps = origProps;
-    this.targetProps = targetProps;
-    this.enabled = true;
-    this.length = 0;
-}
-
-TweenProperty.prototype = {
-    _expandArrayProperties: function( o, t ) {
-        var tp = this.target[ this.name ];
-        var len = m.max( o.length, t.length );
-        for ( var i = 0; i < len; i++ ) {
-            o[ i ] = o[ i ] != undefined ? o[ i ] : tp[ i ];
-            t[ i ] = t[ i ] != undefined ? t[ i ] : tp[ i ];
-        }
-        this.length = len;
-    },
-    refresh: function() {
-        this.start = this.origProps[ this.name ];
-        if ( this.start === undefined ) {
-            this.start = this.target[ this.name ];
-        }
-        
-        this.end = this.targetProps[ this.name ];
-        if ( this.end === undefined ) {
-            this.end = this.target[ this.name ];
-        }
-
-        this.type = getPropertyType(
-            this.start, this.end, this.target[ this.name ] );
-        
-        if ( this.type == PROP_ARRAY ) {
-            this._expandArrayProperties( this.start, this.end );
-        } else if ( this.type == PROP_WAYPOINTS ) {
-            this.waypoints = [ this.start ].concat( this.end );
-        } else if ( this.type == PROP_COLOR ) {
-            this.colorStart = _hexStrToRGB( this.start );
-            this.colorEnd = _hexStrToRGB( this.end );
-        }
+function initTween( tween, target, duration, params ) {
+    initTweenProperties( tween, target, duration, params );
+    initObjectRunnable( tween, params );
+    initObjectCallbacks( tween, params );
+    setTweenTotalDuration( tween );
+    if ( tween._running ) {
+        tween.resume();
     }
-};
-
-function getLocalProgress( obj ) {
-    if ( obj._yoyo && obj._elapsedTime > obj._duration + obj._delay ) {
-        // when yoyo is active we need to invert
-        // the progress on each odd lap
-        var local = obj._duration + obj._repeatDelay + DEC_FIX;
-        var elapsed = m.max( 0, obj._elapsedTime - obj._delay );
-        var lapOdd = m.ceil( elapsed / local ) % 2 === 0;
-        return lapOdd ? 1 - obj._progress : obj._progress;
-    } else {
-        return obj._progress;
-    }
-}
-
-function updateTweenProperties( tween ) {
-    var currentNode = tween._firstNode;
-    var updatedTargets = 0;
-
-    do {
-        var progress = getLocalProgress( tween );
-        var updated = false;
-        for ( var idx = currentNode.properties.length; idx--; ) {
-            var p = currentNode.properties[ idx ];
-            if ( p.enabled && p.type !== PROP_INVALID ) {
-                
-                switch( p.type ) {
-                    case PROP_ARRAY:
-                        var arr = currentNode.target[ p.name ];
-                        for ( var j = 0; j < p.length; j++ ) {
-                            var start = p.start[ j ];
-                            var end = p.end[ j ] - start;
-                            
-                            arr[ j ] = tween._ease(
-                                progress,
-                                start,
-                                end
-                            );
-                        }
-                        break;
-                    case PROP_NUMBER:
-                        currentNode.target[ p.name ] = tween._ease(
-                            progress,
-                            p.start,
-                            p.end
-                        );
-                        break;
-                    case PROP_WAYPOINTS:
-                        var len = p.waypoints.length - 1;
-                        var a = len * progress;
-                        var b = m.floor( a );
-                        var val = tween._ease(
-                            a - b,
-                            p.waypoints[ b ],
-                            p.waypoints[ b + 1 > len ? len : b + 1 ]
-                        );
-                        currentNode.target[ p.name ] = val;
-                        break;
-                    case PROP_COLOR:
-                        var r = tween._ease( progress, p.colorStart[ 0 ], p.colorEnd[ 0 ] );
-                        var g = tween._ease( progress, p.colorStart[ 1 ], p.colorEnd[ 1 ] );
-                        var b = tween._ease( progress, p.colorStart[ 2 ], p.colorEnd[ 2 ] );
-                        var hex = ( ( r * 255 ) << 16 ) + ( ( g * 255) << 8 ) + ( b * 255 | 0 );
-                        currentNode.target[ p.name ] = '#' + hex.toString( 16 );
-                        break;
-                }
-                
-                updated = p.type !== PROP_INVALID;
-            } else {
-                // We remove the property entirely to avoid performance
-                // issues due many disabled properties loopping.
-                // Restarting the loop will bring back the removed
-                // properties by calling resetTargetProperties()
-                currentNode.properties.splice( idx, 1 );
-            }
-        }
-
-        updatedTargets += updated | 0;
-
-    } while ( currentNode = currentNode.next );
-
-    return updatedTargets;
 }
 
 /*
@@ -1252,87 +972,87 @@ function tweenTick( tween, dt ) {
     applyStep( tween, dt );
 }
 
-/*
-* Builds a linked list of all objects and properties to iterate
-* It stores the first linked object in the current tween
-*/
-function resetTargetProperties( tween, targetProperties, originProperties ) {
+function tweenFactory( onQueue, onDequeue ) {  
+    return function ( target, duration, params ) {
+        
+        if ( isObject( duration ) ) {
+            params = duration;
+            duration = 0;    
+        }
+        
+        var valid = isObject( target ) &&
+            isObject( params ) &&
+            isNumber( duration );
+        
+        if ( valid ) {
+            var instance = new Tween$1( onQueue, onDequeue );
+            initTween( instance, target, duration, params );
+            return instance;
+        } else {
+            throw 'Invalid Tween Params';
+        }
+    };
+}
 
-    var targets = _isArray( tween._target ) ? tween._target : [ tween._target ];
-    var prevNode, firstNode;
+var Ticker = function Ticker( params, onQueue ) {
+    params = params || {};
+    this._onQueue = onQueue;
+    this._onTick = isFunction( params.onTick ) ? params.onTick : noop;
+    this.setFPS( params.fps );
+    this.resume();
+};
 
-    // merge keys of targetProperties and originProperties without duplicates
-    var allKeys = Object.keys( targetProperties );
-	var oKeys = Object.keys( originProperties );
-	for ( var i = 0; i < oKeys.length; i++ ) {
-		if ( ! targetProperties[ oKeys[ i ] ] ) {
-			allKeys.push( oKeys[ i ] );
-		}
-	}
+Ticker.prototype = {
+    pause: function() {
+        this._running = false;
+        return this;
+    },
+    resume: function() {
+        this._then = now();
+        this._running = true;
+        this._onQueue( this );
+        return this;
+    },
+    tick: function( time ) {
+        var delta = time - this._then;
 
-    for ( var idx = targets.length; idx--; ) {
-        var currentTarget = targets[ idx ];
-
-        // Tag object id without overwrite
-        currentTarget._twkId = currentTarget._twkId || propDictIdx++;
-
-        var properties = [];
-        for ( var pIdx = 0; pIdx < allKeys.length; pIdx++ ) {
-            var key = allKeys[ pIdx ];
-
-            // Check if key is not a tween property
-            // also we check that the property exists on target
-            if ( !tween.hasOwnProperty( key ) && key in currentTarget ) {
-                var property = new TweenProperty(
-                    currentTarget._twkId + key,
-                    key,
-                    currentTarget,
-                    originProperties,
-                    targetProperties
-                );
-
-                property.refresh();
-                properties.push( property );
-            }
+        if ( delta > this._fpsStep ) {
+            var drop = delta % this._fpsStep;
+            this._then = time - drop;
+            this._onTick( Math.min( delta - drop, this._fpsStep * 4 ) / 1000 );
         }
 
-        var currentNode = {
-            target      : currentTarget,
-            properties  : properties
-        };
-
-        firstNode = firstNode || currentNode;
-
-        if ( prevNode ) {
-            prevNode.next = currentNode;
-        }
-
-        prevNode = currentNode;
+        return this;
+    },
+    setFPS: function( fps ) {
+        this.fps = isNumber( fps ) && fps > 0 ? fps : 60;
+        this._fpsStep = 1000 / this.fps;
     }
+};
 
-    tween._firstNode = firstNode;
-}
-
-function queueTween( tween ) {
-    if ( ! tween._queued ) {
-        resetTargetProperties( tween, tween._to, tween._from );
-        tweens.push( tween );
-        tween._queued = true; 
-        // refresh all properties
-        tween._syncNextTick = true;
-        wakeup();
+function tickerFactory( onQueue ) {
+    return function ( params ) {
+        return new Ticker( params, onQueue );
     }
 }
 
+var TimelineItem = function TimelineItem( obj, type, start, end ) {
+    this._obj = obj;
+    this._type = type;
+    this._start = start;
+    this._end = end;
+    this._eventsEnabled = true;
+};
 
-function queueTicker( ticker ) {
-    if ( ! ticker._queued ) {
-        tickers.push( ticker );
-        wakeup();
-    }
-}
+var TL_ITEM_TWEEN = 0;
+var TL_ITEM_CALLBACK = 1;
+var TL_ITEM_LINE_SYNC = 2;
+var TL_ITEM_LINE_ASYNC = 3;
+var TL_ITEM_DELAY = 4;
+var TL_ITEM_LABEL = 5;
+var TL_ITEM_INVALID = 6;
 
-function Timeline ( params ) {
+var Timeline = function Timeline() {
     initTimeline( this, params );
     this._definitions = {};
     this._computedItems = [];
@@ -1343,7 +1063,7 @@ function Timeline ( params ) {
         onTick: this.tick.bind( this ),
     });
     this._ticker.pause();
-}
+};
 
 Timeline.prototype = {
     _precompute: function( label ) {
@@ -1358,7 +1078,7 @@ Timeline.prototype = {
     },
     let: function( label, obj ) {
         var type = getDefinitionType( obj );
-        if ( _isString( label ) && type != TL_ITEM_INVALID ) {
+        if ( isString( label ) && type != TL_ITEM_INVALID ) {
             
             var isLine = type == TL_ITEM_LINE_SYNC || type == TL_ITEM_LINE_ASYNC;
             if ( isLine && !isValidLine( this._definitions, obj ) ) {
@@ -1384,12 +1104,12 @@ Timeline.prototype = {
         return this;
     },
     delay: function( value ) {
-        this._delay = _isNumber( value ) ? value : 0;
+        this._delay = isNumber( value ) ? value : 0;
         return this;
     },
     plot: function( label ) {
         if ( typeof plotTimeline !== 'undefined' )
-            plotTimeline( this, label );
+            { plotTimeline( this, label ); }
         return this;
     },
     reverse: function() {
@@ -1405,7 +1125,7 @@ Timeline.prototype = {
         return this._totalDuration;
     },
     timeScale: function( value ) {
-        this._timeScale = _isNumber( value ) ? m.max( 0, value ) : 1;
+        this._timeScale = isNumber( value ) ? Math.max( 0, value ) : 1;
     },
     seek: function( seconds, accountForDelay ) {
         this._precompute();
@@ -1443,22 +1163,152 @@ Timeline.prototype = {
     }
 };
 
-function newTimeline( params ) {
-    return new Timeline( params );
+function initTimeline( tl, params ) {
+    // Init Tween Properties
+    initObjectCallbacks( tl, params );
+    initObjectRunnable( tl, params );
+}
+
+function timelineTick( tl, dt ) {
+    if ( tl._delayLeft === 0 ) {
+
+        notifyStart( tl );
+
+        for( var i = 0; i < tl._computedItems.length; i++ ) {
+            var item = tl._computedItems[ i ];
+            if ( tl._direction == 1 && tl._elapsedTime >= item._start ||
+                 tl._direction == -1 && tl._elapsedTime <= item._end ) {
+                if ( item._type == TL_ITEM_TWEEN ) {
+                    seek$1( item._obj, tl._elapsedTime - item._start );
+                    tweenTick( item._obj, 0 );
+                } else if ( item._type == TL_ITEM_CALLBACK && item._eventsEnabled ) {
+                    item._obj.apply( tl );
+                    item._eventsEnabled = false;
+                }
+            }
+        }
+    }
+    
+    notifyOnComplete( tl );
+    updateState( tl );
+    applyStep( tl, dt );
+}
+
+function getItemsDuration( items ) {
+    return _max( items, '_end' ) - min( items, '_start' );
+}
+
+function computeTimeLineItems( items, startLabel, offset ) {
+    offset = offset || 0 ;
+    var result = [];
+    var line = resolveLabel( items, startLabel );
+    line = isArray( line ) ? line : [ line ];
+
+    // resolve all labels to objects and flatten all
+    // excluding async blocks
+    var rLine = resolveItemLabels( items, line );
+    for ( var i = 0; i < rLine.length; i++ ) {
+        var obj = rLine[ i ];
+        var type = getDefinitionType( obj );
+        if ( type == TL_ITEM_DELAY ) {
+            offset += obj;
+        } else {
+            var start = offset; 
+            var end = offset;
+            
+            if ( type == TL_ITEM_TWEEN ) {
+                end = start + obj._totalDuration;
+            }
+
+            if ( type == TL_ITEM_LINE_ASYNC ) {
+                var keys = Object.keys( obj );
+                var subItems = [];
+                var min$$1 = 0;
+                for( var j = 0; j < keys.length; j++ ) {
+                    var key = keys[ j ];
+                    min$$1 = Math.min( min$$1, obj[ key ] );
+
+                    // apply global offset
+                    var aOffset = obj[ key ] + offset;
+
+                    // compute label recursively
+                    subItems = subItems.concat(
+                        computeTimeLineItems( items, key, aOffset ) );
+                }
+                result = result.concat( subItems );
+                
+                // add current block duration to global offset ( positive only )
+                offset += getItemsDuration( subItems );
+
+                // sub negative displacement in block to global offset
+                offset += min$$1 < 0 ? min$$1 : 0;
+            } else {
+                result.push( new TimelineItem( obj, type, start, end ) );
+                offset += end - start;
+            }
+        }
+    }
+    return result;
+}
+
+// Get the final object of a label
+// resolves indirections of n labels to an object
+function resolveLabel( items, val ) {
+    return isString( val ) ? resolveLabel( items, items[ val ] ) : val;
+}
+
+// Resolves all labels in items to their final objects
+// returns a flatten array with all the items
+function resolveItemLabels( items, arr ) {
+    var done = true;
+    for( var i = 0; i < arr.length; i++ ) {
+        var val = resolveLabel( items, arr[ i ] );
+
+        if ( isString( val ) ) {
+            done = false;
+            break;
+        }
+
+        if ( isArray( val ) ) {
+            arr[ i ] = resolveItemLabels( items, val );
+        } else {
+            arr[ i ] = val;
+        }
+    }
+
+    if ( ! done ) {
+        arr = resolveItemLabels( items, arr );
+    }
+    
+    return flatten( arr );
+}
+
+// adjust current items to start from 0
+// shifting negative offsets over all items
+function absShiftTimeLineItems( items ) {
+    var minOffset = min( items, '_start' );
+    if ( minOffset < 0 ) {
+        var shift = Math.abs( minOffset );
+        for ( var i = 0; i < items.length; i++ ) {
+            items[ i ]._start += shift;
+            items[ i ]._end += shift;
+        }
+    }
+    return items;
 }
 
 function getDefinitionType( obj ) {
     if ( obj instanceof Tween ) {
         return TL_ITEM_TWEEN;
-    } else if ( _isNumber( obj ) ){
+    } else if ( isNumber( obj ) ){
         return TL_ITEM_DELAY;
-    } else if ( _isString( obj ) ) {
+    } else if ( isString( obj ) ) {
         return TL_ITEM_LABEL;
-    } else if ( _isFunction( obj ) ) {
+    } else if ( isFunction( obj ) ) {
         return TL_ITEM_CALLBACK;
-    } else if ( _isArray( obj ) ) {
+    } else if ( isArray( obj ) ) {
         return TL_ITEM_LINE_SYNC;
-    } else if ( _isObject( obj ) ) {
+    } else if ( isObject( obj ) ) {
         return TL_ITEM_LINE_ASYNC;
     } else {
         return TL_ITEM_INVALID;
@@ -1485,7 +1335,7 @@ function isValidLine( labels, lineArray ) {
             var keys = Object.keys( item );
             for( var j = 0; j < keys.length; j++ ) {
                 var key = keys[ j ];
-                if ( !_isNumber( item[ key ] ) ) {
+                if ( !isNumber( item[ key ] ) ) {
                     valid = false;
                     break;
                 }
@@ -1500,263 +1350,71 @@ function isValidLine( labels, lineArray ) {
     return valid;
 }
 
-function TimelineItem( obj, type, start, end ) {
-    this._obj = obj;
-    this._type = type;
-    this._start = start;
-    this._end = end;
-    this._eventsEnabled = true;
-}
-
-// Get the final object of a label
-// resolves indirections of n labels to an object
-function resolveLabel( items, val ) {
-    return _isString( val ) ? resolveLabel( items, items[ val ] ) : val;
-}
-
-// Resolves all labels in items to their final objects
-// returns a flatten array with all the items
-function resolveItemLabels( items, arr ) {
-    var done = true;
-    for( var i = 0; i < arr.length; i++ ) {
-        var val = resolveLabel( items, arr[ i ] );
-
-        if ( _isString( val ) ) {
-            done = false;
-            break;
-        }
-
-        if ( _isArray( val ) ) {
-            arr[ i ] = resolveItemLabels( items, val );
-        } else {
-            arr[ i ] = val;
-        }
-    }
-
-    if ( ! done ) {
-        arr = resolveItemLabels( items, arr );
-    }
-    
-    return _flatten( arr );
-}
-
-// adjust current items to start from 0
-// shifting negative offsets over all items
-function absShiftTimeLineItems( items ) {
-    var minOffset = _min( items, '_start' );
-    if ( minOffset < 0 ) {
-        var shift = m.abs( minOffset );
-        for ( var i = 0; i < items.length; i++ ) {
-            items[ i ]._start += shift;
-            items[ i ]._end += shift;
-        }
-    }
-    return items;
-}
-
-function getItemsDuration( items ) {
-    return _max( items, '_end' ) - _min( items, '_start' );
-}
-
-function computeTimeLineItems( items, startLabel, offset ) {
-    offset = offset || 0 ;
-    var result = [];
-    var line = resolveLabel( items, startLabel );
-    line = _isArray( line ) ? line : [ line ];
-
-    // resolve all labels to objects and flatten all
-    // excluding async blocks
-    var rLine = resolveItemLabels( items, line );
-    for ( var i = 0; i < rLine.length; i++ ) {
-        var obj = rLine[ i ];
-        var type = getDefinitionType( obj );
-        if ( type == TL_ITEM_DELAY ) {
-            offset += obj;
-        } else {
-            var start = offset; 
-            var end = offset;
-            
-            if ( type == TL_ITEM_TWEEN ) {
-                end = start + obj._totalDuration;
-            }
-
-            if ( type == TL_ITEM_LINE_ASYNC ) {
-                var keys = Object.keys( obj );
-                var subItems = [];
-                var min = 0;
-                for( var j = 0; j < keys.length; j++ ) {
-                    var key = keys[ j ];
-                    min = m.min( min, obj[ key ] );
-
-                    // apply global offset
-                    var aOffset = obj[ key ] + offset;
-
-                    // compute label recursively
-                    subItems = subItems.concat(
-                        computeTimeLineItems( items, key, aOffset ) );
-                }
-                result = result.concat( subItems );
-                
-                // add current block duration to global offset ( positive only )
-                offset += getItemsDuration( subItems );
-
-                // sub negative displacement in block to global offset
-                offset += min < 0 ? min : 0;
-            } else {
-                result.push( new TimelineItem( obj, type, start, end ) );
-                offset += end - start;
-            }
-        }
-    }
-    return result;
-}
-
-function initTimeline( tl, params ) {
-    tl._initted = false;
-    initObjectCallbacks( tl, params );
-    initObjectRunnable( tl, params );
-    tl._initted = true;
-}
-
-
-function timelineTick( tl, dt ) {
-    if ( tl._delayLeft === 0 ) {
-
-        notifyStart( tl );
-
-        for( var i = 0; i < tl._computedItems.length; i++ ) {
-            var item = tl._computedItems[ i ];
-            if ( tl._direction == 1 && tl._elapsedTime >= item._start ||
-                 tl._direction == -1 && tl._elapsedTime <= item._end ) {
-                if ( item._type == TL_ITEM_TWEEN ) {
-                    seek( item._obj, tl._elapsedTime - item._start );
-                    tweenTick( item._obj, 0 );
-                } else if ( item._type == TL_ITEM_CALLBACK && item._eventsEnabled ) {
-                    item._obj.apply( tl )
-                    item._eventsEnabled = false;
-                }
-            }
-        }
-    }
-    
-    notifyOnComplete( tl );
-    updateState( tl );
-    applyStep( tl, dt );
-}
-
-function getEasing( val ) {
-    if ( easing[ val ] ) {
-        return easing[ val ];
-    } else if ( _isArray( val ) && val.length == 4 ) {
-        return wrapEasing( bezierEase.apply( this, val ) );
-    } else {
-        if ( val != undefined ) {
-            var easingNames = Object.keys( easing ).join(' | ');
-            console.warn( 'Invalid easing name: ' + val );
-            console.warn( 'Available easings: ' + easingNames );
-        }
-        return easing.linear;
+function timelineFactory() {
+    return function ( params ) {
+        return new Timeline();
     }
 }
 
-function setTweenDuration( tween ) {
-    
-    var total = 0;
-    var tweenDuration = tween._duration;
-    var repeatDelay = tween._repeatDelay;
-    var delay = tween._delay;
-    
-    if ( tween._infinite ) {
-        
-        // if is an infinite loop then just 
-        // take two laps as the total duration
-        total = tween._duration * 2;
-        total += delay + repeatDelay * 2;
-    } else if ( tween._repeat > 0 ) {
-        var repeatDuration = ( tweenDuration + repeatDelay ) * tween._repeat;
-        total = tweenDuration + repeatDuration + delay;
-    } else {
-        total = tweenDuration + delay;
-    }
+var rAF;
+var cAF;
 
-    tween._totalDuration = total;
+// borrowed from https://github.com/soulwire/sketch.js/blob/master/js/sketch.js
+var vendors;
+var a;
+var b;
+var c;
+var idx;
+var now$1;
+var dt;
+var id;
+var then = 0;
+
+vendors = [ 'ms', 'moz', 'webkit', 'o' ];
+a = 'AnimationFrame';
+b = 'request' + a;
+c = 'cancel' + a;
+
+rAF = wnd[ b ];
+cAF = wnd[ c ];
+
+for ( var idx = vendors.lenght; !rAF && idx--; ) {
+    rAF = wnd[ vendors[ idx ] + 'Request' + a ];
+    cAF = wnd[ vendors[ idx ] + 'Cancel' + a ];
 }
 
-function initTween( tween, target, params ) {
-    tween._initted = false;
-    var duration = params.shift();
-    var cfg = params.shift();
+rAF = rAF || function( callback ) {
+    now$1 = _now();
+    dt = m.max( 0, 16 - ( now$1 - then ) );
+    id = setTimeout( function () {
+        callback( now$1 + dt );
+    }, dt );
+    then = now$1 + dt;
+    return id;
+};
 
-    // expecting duration in position 1
-    // buf if an object was given instead
-    // then treat it as Tween.set
-    if ( _isObject( duration ) ) {
-        cfg = duration;
-        duration = 0;
+cAF = cAF || function( id ) {
+    clearTimeout( id );
+};
+
+var request = rAF;
+
+var tweens = [];
+var tickers = [];
+var isSleeping = true;
+var cleanupDirty = false;
+var mainTicker = new Ticker( {
+    onTick: updateTweens
+}, queueTicker );
+
+
+function wakeup() {
+    if ( isSleeping === true ) {
+        isSleeping = false;
+        setTimeout( function() {
+            onFrame();
+        }, 1 );
     }
-
-    tween._target       = target;
-    
-    tween._syncNextTick = true;
-    tween._ease         = getEasing( cfg.ease );
-    tween._from         = _isObject( cfg.from ) ? cfg.from : {};
-    tween._to           = _isObject( cfg.to ) ? cfg.to: {};
-    tween._duration     = _isNumber( duration ) ? m.max( 0, duration ) : 0;
-    tween._initted      = true;
-    initObjectRunnable( tween, cfg );
-    initObjectCallbacks( tween, cfg );
-    setTweenDuration( tween );
-}
-
-function executeOnAllTweens ( funcName ) {
-    return function() {
-        for ( var idx = tweens.length; idx--; ) {
-            var tween = tweens[ idx ];
-            tween[ funcName ].apply( tween, arguments );
-        }
-    };
-}
-
-function updateTweens( delta ) {
-    delta = m.max( 0, delta );
-    // update tweens (order matters)
-    for ( var idx = 0, length = tweens.length; idx < length; idx++  ) {
-        tweens[ idx ]._running && tweenTick( tweens[ idx ], delta );
-    }
-}
-
-function cleanupRunnable( arr ) {
-    for ( var idx = arr.length; idx--; ) {
-        var obj = arr[ idx ];
-        if ( ! obj._running ) {
-            obj._queued = false;
-            arr.splice( idx, 1 );
-        }
-    }
-}
-
-function onFrame() {
-    if ( cleanupDirty ) {
-        cleanupRunnable( tickers );
-        cleanupRunnable( tweens );
-        cleanupDirty = false;
-    }
-
-    // Update tickers
-    for ( var idx = 0; idx < tickers.length; idx++ ) {
-        tickers[ idx ].tick( _now() );
-    }
-
-    if ( tickers.length > 0 && tweens.length > 0 ) {
-        rAF( onFrame );
-    } else {
-        sleeping = true;
-    }
-
-}
-
-function newTicker( params ) {
-    return new Ticker( params );
 }
 
 function setAutoUpdate( enabled ) {
@@ -1772,48 +1430,95 @@ function manualStep( step ) {
     updateTweens( step );
 }
 
-function newTweenFactory() {        
-    return function create() {
+function updateTweens( delta ) {
+    delta = Math.max( 0, delta );
+    // update tweens (order matters)
+    for ( var idx = 0, length = tweens.length; idx < length; idx++  ) {
+        tweens[ idx ]._running && tweenTick( tweens[ idx ], delta );
+    }
+}
 
-        // fix: avoid optimization bailout
-        // https://github.com/petkaantonov/bluebird/wiki/Optimization-killers
-        var i = arguments.length;
-        var args = [];
-        while (i--) args[i] = arguments[i];
-        
-        var target = args.shift();
-        var tween = undefined;
-        if ( typeof target == 'object' && args.length > 0 ) {
-            tween = new Tween();
-            initTween( tween, target, args );
-        } else {
-            throw 'Invalid Tween';
+function onFrame() {
+    if ( cleanupDirty ) {
+        cleanupRunnable( tickers );
+        cleanupRunnable( tweens );
+        cleanupDirty = false;
+    }
+
+    // Update tickers
+    for ( var idx = 0; idx < tickers.length; idx++ ) {
+        tickers[ idx ].tick( now() );
+    }
+    
+    if ( tickers.length === 1 && tweens.length === 0 ) {
+        isSleeping = true;
+    } else {
+        request( onFrame );
+    }
+
+}
+
+function cleanupRunnable( arr ) {
+    for ( var idx = arr.length; idx--; ) {
+        var obj = arr[ idx ];
+        if ( ! obj._running ) {
+            obj._queued = false;
+            arr.splice( idx, 1 );
         }
-        
-        if ( tween._initted ) {
-            queueTween( tween );
+    }
+}
+
+function dequeue() {
+    cleanupDirty = true;
+}
+
+function queueTween( tw ) {
+    if ( ! tw._queued ) {
+        resetTargetProperties( tw );
+        tweens.push( tw );
+        tw._queued = true; 
+        // refresh all properties
+        tw._syncNextTick = true;
+        wakeup();
+    }
+}
+
+function queueTicker( tk ) {
+    if ( ! tk._queued ) {
+        tk._queued = true;
+        tickers.push( tk );
+        wakeup();
+    }
+}
+
+function executeOnAllTweens ( funcName ) {
+    return function() {
+        var arguments$1 = arguments;
+
+        for ( var idx = tweens.length; idx--; ) {
+            var tween = tweens[ idx ];
+            tween[ funcName ].apply( tween, arguments$1 );
         }
-        return tween;
     };
 }
 
-mainTicker = new Ticker( { onTick: updateTweens } );
-
-var instance = new function Tweenkey(){};
-
-return _extend( instance, {
-    set         : newTweenFactory(),
-    tween       : newTweenFactory(),
+var Tweenkey = function Tweenkey () {};
+Tweenkey.prototype = {
+    set         : tweenFactory( queueTween, dequeue ),
+    tween       : tweenFactory( queueTween, dequeue ),
+    ticker      : tickerFactory( queueTicker, dequeue ),
+    timeline    : timelineFactory(),
     clearAll    : executeOnAllTweens( 'clear' ),
     clearTweensOf: function() { console.log('todo'); },
     pauseAll    : executeOnAllTweens( 'pause' ),
     resumeAll   : executeOnAllTweens( 'resume' ),
-    timeline    : newTimeline,
-    ticker      : newTicker,
     update      : manualStep,
     autoUpdate  : setAutoUpdate,
     setFPS      : mainTicker.setFPS.bind( mainTicker )
-} );
+};
 
+var main = new Tweenkey();
 
-}));
+return main;
+
+})));
