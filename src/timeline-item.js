@@ -4,6 +4,7 @@ export class TimelineItem {
         this._type = type;
         this._start = start;
         this._end = end;
+        this._duration = Math.max( 0, end - start );
         this._eventsEnabled = true;
     }
 }

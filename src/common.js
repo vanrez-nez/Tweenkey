@@ -1,8 +1,7 @@
 import * as utils from './utils';
-import * as globals from './globals';
 
 export function initObjectCallbacks( obj, params ) {
-    var p = params || {};
+    let p = params || {};
     obj._onStart      = utils.isFunction( p.onStart ) ? p.onStart : utils.noop;
     obj._onUpdate     = utils.isFunction( p.onUpdate ) ? p.onUpdate : utils.noop;
     obj._onComplete   = utils.isFunction( p.onComplete ) ? p.onComplete : utils.noop;
@@ -10,13 +9,14 @@ export function initObjectCallbacks( obj, params ) {
 }
 
 export function initObjectRunnable( obj, params ) {
-    var p = params || {};
-    var delay = utils.isNumber( p.delay ) ? Math.max( 0, p.delay ) : 0;
-    var repeatCount = utils.isNumber( p.repeat ) ? p.repeat : 0;
+    let p = params || obj._params || {};
+    let delay = utils.isNumber( p.delay ) ? Math.max( 0, p.delay ) : 0;
+    let repeatCount = utils.isNumber( p.repeat ) ? p.repeat : 0;
     
-    obj._queued       = false;
-    obj._totalDuration  = 0;
+    // if obj already have queued state dont changed
+    obj._queued         = utils.isBoolean( obj._queued ) ? obj._queued : false;
     obj._inverted       = utils.isBoolean( p.inverted ) ? p.inverted : false;
+    obj._totalDuration  = 0;
     obj._direction      = 1;
     obj._progress       = 0;
     obj._totalProgress  = 0;
@@ -43,45 +43,49 @@ export function initObjectRunnable( obj, params ) {
  */
 export function applyStep( obj, dt ) {
     dt *= obj._direction;
-    var time = obj._elapsedTime + dt * obj._timeScale;
+    let time = obj._elapsedTime + dt * obj._timeScale;
     seek( obj, time, true, true );
 }
 
 export function notifyOnUpdate( obj ) {
-    if ( obj._elapsedTime > obj._delay ) {
+    if ( obj._elapsedTime >= obj._delay ) {
         obj._onUpdate.call( obj, obj._target );
+        return true;
     }
 }
 
 export function notifyStart( obj ) {
         if ( obj._elapsedTime > obj._delay ) {
-            var lastElapsed = Math.max( 0, obj._lastElapsedTime - obj._delay );
+            let lastElapsed = Math.max( 0, obj._lastElapsedTime - obj._delay );
             if ( lastElapsed === 0 ) {
             obj._onStart.call( obj._target || obj );
+            return true;
         }
     }
 }
 
 export function notifyOnComplete( obj ) {
-    if ( obj._elapsedTime > obj._delay &&
-        obj._totalDuration === utils.roundDecimals( obj._elapsedTime )  &&
-        ! obj._infinite ) {
+    if ( obj._elapsedTime >= obj._delay &&
+        utils.roundDecimals( obj._elapsedTime ) === obj._totalDuration &&
+        ! obj._infinite && obj._lastElapsedTime < obj._elapsedTime ) {
             obj._onComplete.call( obj, obj._target );
+            return true;
         }
 }
 
 export function notifyOnRepeat( obj ) {
     if ( obj._elapsedTime > obj._delay &&
         ( obj._repeat > 0 || obj._yoyo ) ) {
-        var delay = obj._delay;
-        var d = obj._duration + obj._repeatDelay;
-        var a = ( obj._elapsedTime - delay ) / d;
-        var b = ( obj._lastElapsedTime - delay ) / d;
-        var repeatCount = ~b - ~a;
-        var tail = a > b ? b : a;
+        let delay = obj._delay;
+        let d = obj._duration + obj._repeatDelay;
+        let a = ( obj._elapsedTime - delay ) / d;
+        let b = ( obj._lastElapsedTime - delay ) / d;
+        let repeatCount = ~b - ~a;
+        let tail = a > b ? b : a;
         if ( repeatCount !== 0 && 
             ( obj._infinite || Math.abs( tail ) < obj._repeat ) ) {
             obj._onRepeat.call( obj, obj._target );
+            return true;
         }
     }
 }
@@ -91,14 +95,36 @@ export function notifyOnRepeat( obj ) {
  */
 export function updateState( obj ) {
     if ( ! obj._infinite && obj._totalProgress === 1 ) {
-        obj.clear();
+        obj._running = false;
     }
 }
 
+export function setRunnableTotalDuration( obj ) {
+    let total = 0;
+    let objDuration = obj._duration;
+    let repeatDelay = obj._repeatDelay;
+    let delay = obj._delay;
+    
+    if ( obj._infinite ) {
+        // if is an infinite loop then just 
+        // take two laps as the total duration
+        total = obj._duration * 2;
+        total += delay + repeatDelay * 2;
+    } else if ( obj._repeat > 0 ) {
+        let repeatDuration = ( objDuration + repeatDelay ) * obj._repeat;
+        total = objDuration + repeatDuration + delay;
+    } else {
+        total = objDuration + delay;
+    }
+
+    obj._totalDuration = total;
+}
+
+
 export function seekProgress( obj, progress, global, accountForDelay ) {
     progress = utils.clamp( progress, 0, 1 );
-    var delayJump = accountForDelay ? 0 : obj._delay;
-    var duration = 0;
+    let delayJump = accountForDelay ? 0 : obj._delay;
+    let duration = 0;
     if ( global ) {
         duration = obj._totalDuration;
     } else {
@@ -108,15 +134,13 @@ export function seekProgress( obj, progress, global, accountForDelay ) {
         duration += obj._delay;
     }
     
-    var time = progress * ( duration - delayJump ) ;
+    let time = progress * ( duration - delayJump ) ;
     seek( obj, time + delayJump, global );
 }
 
 // sets tweens and timelines to a certain time
 export function seek( obj, time ) {
     time = Math.max( 0, time );
-    
-    
 
     obj._lastElapsedTime = obj._elapsedTime;
     obj._elapsedTime = time;
@@ -128,15 +152,15 @@ export function seek( obj, time ) {
             obj._elapsedTime = time;
         }
 
-        time = ( time - obj._delay - globals.DEC_FIX ) % obj._totalDuration + obj._delay;
+        time = ( time - obj._delay - utils.DEC_FIX ) % obj._totalDuration + obj._delay;
     }
     
     obj._totalProgress = utils.roundDecimals( time / obj._totalDuration );
 
     if ( time > obj._delay ) {
-        var time = time - obj._delay;
-        var local = obj._duration + globals.DEC_FIX;
-        var elapsed = time % ( local + obj._repeatDelay );
+        time = time - obj._delay;
+        let local = obj._duration + utils.DEC_FIX;
+        let elapsed = time % ( local + obj._repeatDelay );
         if ( elapsed <= local ) {
             obj._progress = utils.roundDecimals( ( elapsed % local ) / local );
         } else {
@@ -150,12 +174,23 @@ export function seek( obj, time ) {
         obj._progress = 1 - obj._progress;
     }
 
-//    console.log( obj._progress );
-
     return;
     /*console.log(
         'local:', obj._progress,
         'global:', obj._totalProgress,
         'elapsed time:', obj._elapsedTime
     );*/
+}
+
+export function getProgress( obj ) {
+    if ( obj._yoyo && obj._elapsedTime > obj._duration + obj._delay ) {
+        // when yoyo is active we need to invert
+        // the progress on each odd lap
+        let local = obj._duration + obj._repeatDelay + utils.DEC_FIX;
+        let elapsed = Math.max( 0, obj._elapsedTime - obj._delay );
+        let lapOdd = Math.ceil( elapsed / local ) % 2 === 0;
+        return lapOdd ? 1 - obj._progress : obj._progress;
+    } else {
+        return obj._progress;
+    }
 }

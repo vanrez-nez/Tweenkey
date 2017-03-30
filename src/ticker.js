@@ -1,9 +1,9 @@
 import * as utils from './utils';
 
 export class Ticker {
-    constructor( params, onQueue ) {
+    constructor( params, onStateChange ) {
         params = params || {};
-        this._onQueue = onQueue;
+        this._onStateChange = onStateChange;
         this._onTick = utils.isFunction( params.onTick ) ? params.onTick : utils.noop;
         this.setFPS( params.fps );
         this.resume();
@@ -13,19 +13,20 @@ export class Ticker {
 Ticker.prototype = {
     pause: function() {
         this._running = false;
+        this._onStateChange( this );
         return this;
     },
     resume: function() {
         this._then = utils.now();
         this._running = true;
-        this._onQueue( this );
+        this._onStateChange( this );
         return this;
     },
     tick: function( time ) {
-        var delta = time - this._then;
-
+        
+        let delta = time - this._then;
         if ( delta > this._fpsStep ) {
-            var drop = delta % this._fpsStep;
+            let drop = delta % this._fpsStep;
             this._then = time - drop;
             this._onTick( Math.min( delta - drop, this._fpsStep * 4 ) / 1000 );
         }
@@ -38,8 +39,8 @@ Ticker.prototype = {
     }
 };
 
-export function tickerFactory( onQueue ) {
+export function tickerFactory( onStateChange ) {
     return ( params ) => {
-        return new Ticker( params, onQueue );
+        return new Ticker( params, onStateChange );
     }
 }

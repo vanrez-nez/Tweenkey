@@ -49,20 +49,16 @@ function getInputRange( params, onChange ) {
 (function() {
 
 	function getTweenCircle( className, caption, xTarget, yStart ) {
-		var circle = document.createElement( 'div' );
-		circle.className = className;
-		circle.innerText = caption;
-		document.body.appendChild( circle );
-		
-		var pos = { x: 30, y: yStart }
-		return Tweenkey.tween( pos, 1, {
+		var circle = getCircleElement( className ); 
+		circle.y = yStart;
+		circle.applyStyle();
+
+		return Tweenkey.tween( circle, 1, {
 			to: { x: xTarget },
 			ease: 'BackInOut',
-			repeat: 2,
+			//repeat: 2,
 			onUpdate: function() {
-				var s = 'opacity: 1;';
-				s += 'transform: matrix( 1, 0, 0, 1,' +  pos.x + ',' + pos.y + ');';
-				circle.setAttribute( 'style', s );
+				circle.applyStyle();
 			},
 			onStart: function() { console.log( caption + ': onStart' ) },
 			onComplete: function() { console.log( caption + ': onComplete' ) },
@@ -70,76 +66,135 @@ function getInputRange( params, onChange ) {
 		} );
 	}
 
-	var tl = Tweenkey.timeline( {
-		//timeScale: 0.5,
-		//delay: 1,
-		//yoyo: true,
-		//repeat: 3,
-		autoStart: false,
-		onComplete: function() { console.log( 'TL Complete!' ) },
-		onStart: function() { console.log( 'TL Start!' ) },
-		onRepeat: function() { console.log( 'Repeat!' ) }
-	} );
-	
-	tl.let( 't1', getTweenCircle( 'circle c0', 'T1', 200, 0 ) );
-	tl.let( 't2', getTweenCircle( 'circle c1', 'T2', 200, 60 ) );
-	tl.let( 't3', getTweenCircle( 'circle c2', 'T3', 200, 120 ) );
 
-	tl.let( 't4', getTweenCircle( 'circle c3', 'T4', 200, 180 ) );
-	tl.let( 't5', getTweenCircle( 'circle c4', 'T5', 200, 240 ) );
-	tl.let( 't6', getTweenCircle( 'circle c5', 'T6', 200, 300 ) );
+	if ( false ) {
+		var circle = getCircleElement( 'c1' ); 
+		circle.y = 30;
+		circle.applyStyle();
+		var tl = new TimelineMax({
+			yoyo: false,
+			repeat: 1,
+			onComplete: function() { console.log( 'TLM Complete!' ) },
+			onStart: function() { console.log( 'TLM Start!' ) },
+			onRepeat: function() { console.log( 'TLM Repeat!' ) }
+		});
 
-	tl.let( 'cb', function() { console.log('cb!') } );
-	tl.let( 's1', [ { 't1': 0, 't2': 0.15, 't3': 0.25 } ] );
-	tl.let( 's2', [ { 't4': 0, 't5': 0.2, 't6': 0.3 } ] );
-	tl.let( 'main', [ { 's1': 0, 's2': 1 }, 'cb' ] );
-	//tl.play( 'main' ).pause();
-	//tl.timeScale(1);
-	tl.resume();
-	//console.log('======');
-	tl.plot( 'main' );
+		tl.to( circle, 1, {
+			x: 500,
+			ease: Back.easeInOut,
+			onStart: function() { console.log( 'onStart' ) },
+			onComplete: function() { console.log( 'onComplete' ) },
+			onRepeat: function() { console.log( 'onRepeat' ) },
+			onUpdate: function() { circle.applyStyle() }
+		} );
 
-});
+		tl.play();
+
+	} else {
+		var tl = Tweenkey.timeline( {
+			timeScale: 1,
+			//inverted: true,
+			yoyo: true,
+			repeat: 1,
+			repeatDelay: 0.5,
+			onComplete: function() { console.log( 'TL Complete!' ) },
+			onStart: function() { console.log( 'TL Start!' ) },
+			onRepeat: function() { console.log( 'TL Repeat!' ) }
+		} );
+		
+		tl.define( 't1', getTweenCircle( 'circle c0', 'T1', 500, 0 ) );
+		tl.define( 't2', getTweenCircle( 'circle c1', 'T2', 500, 60 ) );
+		tl.define( 't3', getTweenCircle( 'circle c2', 'T3', 500, 120 ) );
+		tl.define( 't4', getTweenCircle( 'circle c3', 'T4', 500, 180 ) );
+		tl.define( 't5', getTweenCircle( 'circle c4', 'T5', 500, 240 ) );
+		tl.define( 't6', getTweenCircle( 'circle c5', 'T6', 500, 300 ) );
+
+		//tl.define( 'cb', function() { console.log('cb!') } );
+		tl.define( 's1', [ { 't1': 0, 't2': 0.1, 't3': 0.2 } ] );
+		tl.define( 's2', [ { 't4': 0.3, 't5': 0.4, 't6': 0.5 } ] );
+		tl.define( 'main', [ { 's1': 0, 's2': 0 } ] );
+		tl.play( 'main' );
+		//tl.timeScale(1);
+		//tl.resume();
+		//console.log('======');
+		tl.plot( 'main' );
+
+	}
+
+	var input = getInputRange( { y: 400, width: 500, max: 100000 }, function() {
+		tl.progress( this.value / 100000, true ).pause();
+	});
+
+})();
 
 (function() {
 
 	var circle = getCircleElement( 'c1' );
 	circle.applyStyle();
-	//Tweenkey.setFPS( 9 );
-	var t = Tweenkey.tween( circle, 1, { 
-		from: { x: 0 },
-		to: { x: 500 },
-		//delay: 1,
-		repeat: 2,
-		//inverted: true,
-		yoyo: true,
-		repeatDelay: 0.5,
-		//autoStart: false,
-		onUpdate: function() {
-			//console.log( 'update:', circle.x );
-			circle.applyStyle();
-			//console.log( 'update' );
-		},
-		onStart: function() {
-			console.log( 'TK start!' );
-		},
-		onComplete: function() {
-			console.log( 'TK completed!' );
-		},
-		onRepeat: function() {
-			console.log( 'TK repeat' );
-		}
-	} );
 
-	var input = getInputRange( { y: 100, width: 1400, max: 100000 }, function() {
-		//t.totalProgress( this.value / 100000, false ).pause();
-		t.progress( this.value / 100000, true ).pause();
+	if ( true ) {
+		
+		let t = TweenMax.to( circle, 1, {
+			x: 500,
+			delay: 1,
+			repeat: 10,
+			repeatDelay: 0.5,
+			yoyo: true,
+			ease: Linear.easeNone,
+			onUpdate: function() {
+				circle.applyStyle();
+			}
+		} );
 
-	});
+		circle.x = 400;
+		t.restart();
+		circle.applyStyle();
 
-	t.timeScale( 1 );
-	
-})();
+		setTimeout( ()=> {
+			circle.x = 0;
+			t.restart();
+		}, 500 );
+	} else {
+		var t = Tweenkey.tween( circle, 1, { 
+			to: { x: 500 },
+			delay: 0.5,
+			repeat: 10,
+			//inverted: true,
+			yoyo: true,
+			repeatDelay: 0.5,
+			//autoStart: false,
+			onUpdate: function() {
+				//console.log( 'update:', circle.x );
+				circle.applyStyle();
+				//console.log( 'update' );
+			},
+			onStart: function() {
+				console.log( 'TK start!' );
+			},
+			onComplete: function() {
+				console.log( 'TK completed!' );
+			},
+			onRepeat: function() {
+				console.log( 'TK repeat' );
+			}
+		} );
+		
+		circle.x = 400;
+		t.restart();
+		circle.applyStyle();
+
+		setTimeout( ()=> {
+			circle.x = 0;
+			t.restart();
+		}, 500 );
+
+		var input = getInputRange( { y: 100, width: 1400, max: 100000 }, function() {
+			//t.totalProgress( this.value / 100000, false ).pause();
+			t.progress( this.value / 100000, true ).pause();
+
+		});
+	}
+});
 
 (function() {
 	var circle = getCircleElement( 'c1' );

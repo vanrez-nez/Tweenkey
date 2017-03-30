@@ -1,18 +1,16 @@
-import * as globals from './globals';
-
-
+export const DEC_FIX = 0.000001;
 export const colorRE = new RegExp(/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i);
 
 const TYPE_FNC = ({}).toString;
 function getTypeCheck( typeStr, fastType ) {
-    return function( obj ) {
+    return ( obj ) => {
         return fastType ? typeof obj === typeStr:
             TYPE_FNC.call( obj ) === typeStr;
     };
 }
 
 function minMax( obj, arr, key ) {
-    return obj.apply( m, arr.map( function( item ) {
+    return obj.apply( Math, arr.map( ( item ) => {
         return item[ key ];
     } ) );
 }
@@ -26,16 +24,16 @@ export const isColor = ( str ) => {
     return colorRE.test( str );
 };
 
-export const isObject = ( obj ) => {
+export function isObject( obj ) {
     return !!obj && obj.constructor === Object;
 };
 
-export const flatten = ( arr ) => { 
+export function flatten( arr ) { 
     return [].concat.apply( [], arr );
 };
 
-export const hexStrToRGB = function( str ) {
-    var hex = parseInt( str.slice( 1 ), 16 );
+export function hexStrToRGB( str ) {
+    let hex = parseInt( str.slice( 1 ), 16 );
     return [
         (( hex >> 16 ) & 0xFF) / 255,
         (( hex >> 8 ) & 0xFF) / 255,
@@ -43,34 +41,35 @@ export const hexStrToRGB = function( str ) {
     ];
 };
 
-export const clamp = function( value, min, max ) {
+export function clamp( value, min, max ) {
     return Math.min( Math.max( value, min ), max );
 };
 
-export const now = function() {
-    return globals.PERFORMANCE.now();
+export function now() {
+    return window.performance.now();
+    //return window.performance && window.performance.now ? window.performance.now() : Date.now();
 };
 
-export const extend = function( target, source, overwrite ) {
-    for ( var key in source ) {
+export function extend( target, source, overwrite ) {
+    for ( let key in source ) {
         ( overwrite || !( key in target ) ) && ( target[ key ] = source[ key ] );
     }
     return target;
 };
 
-export const noop = function() {
+export function noop() {
     return false;
 };
 
-export const roundDecimals = function( n ) {
+export function roundDecimals( n ) {
     return Math.round( n * 1000 ) / 1000;
 };
 
-export const min = function( arr, key ) {
+export function min( arr, key ) {
     return minMax( Math.min, arr, key );
 };
 
-export const max = function( arr, key ) {
+export function max( arr, key ) {
     return minMax( Math.max, arr, key );
 }
 

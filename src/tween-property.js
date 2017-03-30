@@ -15,20 +15,28 @@ export class TweenProperty {
         this.targetProps = targetProps;
         this.enabled = true;
         this.length = 0;
+        this.synced = false;
+        this.type = PROP_INVALID;
     }
 }
 
 TweenProperty.prototype = {
     _expandArrayProperties: function( o, t ) {
-        var tp = this.target[ this.name ];
-        var len = Math.max( o.length, t.length );
-        for ( var i = 0; i < len; i++ ) {
+        let tp = this.target[ this.name ];
+        let len = Math.max( o.length, t.length );
+        for ( let i = 0; i < len; i++ ) {
             o[ i ] = o[ i ] != undefined ? o[ i ] : tp[ i ];
             t[ i ] = t[ i ] != undefined ? t[ i ] : tp[ i ];
         }
         this.length = len;
     },
-    refresh: function() {
+    sync: function() {
+        
+        if ( this.synced ) {
+            return;
+        }
+        
+        this.synced = true;
         this.start = this.origProps[ this.name ];
         if ( this.start === undefined ) {
             this.start = this.target[ this.name ];

@@ -1,7 +1,10 @@
 import * as utils from './utils';
 import * as common from './common';
+import * as engine from './engine';
 import * as tween from './tween';
+import { Ticker } from './ticker';
 import { TimelineItem } from './timeline-item';
+import { plotTimeline } from './dev-tools';
 
 const TL_ITEM_TWEEN = 0;
 const TL_ITEM_CALLBACK = 1;
@@ -13,15 +16,14 @@ const TL_ITEM_INVALID = 6;
 
 class Timeline {
     constructor() {
-        initTimeline( this, params );
         this._definitions = {};
         this._computedItems = [];
         this._lastDirection = this._direction;
         this._lastElapsedTime = 0;
         this._startLabel = '';
-        this._ticker = newTicker({
+        this._ticker = new Ticker( {
             onTick: this.tick.bind( this ),
-        });
+        }, engine.onRunnableStateChange );
         this._ticker.pause();
     }
 }
@@ -30,25 +32,28 @@ Timeline.prototype = {
     _precompute: function( label ) {
         if ( this._needsRecompute ) {
             label = label || this._startLabel;
-            var items = computeTimeLineItems( this._definitions, label );
-            this._computedItems = absShiftTimeLineItems( items );
-            this._totalDuration = getItemsDuration( this._computedItems );
-            console.log( this._totalDuration );
-            this._needsRecompute = false;
+            if ( this._definitions[ label ] ) {
+                let items = computeTimeLineItems( this._definitions, label );
+                this._computedItems = absShiftTimeLineItems( items );
+                setTimelineTotalDuration( this );
+                //console.log( this._totalDuration );
+                this._needsRecompute = false;
+            }
         }
     },
-    let: function( label, obj ) {
-        var type = getDefinitionType( obj );
+    define: function( label, obj ) {
+        let type = getDefinitionType( obj );
         if ( utils.isString( label ) && type != TL_ITEM_INVALID ) {
             
-            var isLine = type == TL_ITEM_LINE_SYNC || type == TL_ITEM_LINE_ASYNC;
+            let isLine = type == TL_ITEM_LINE_SYNC || type == TL_ITEM_LINE_ASYNC;
             if ( isLine && !isValidLine( this._definitions, obj ) ) {
                 return this;
             }
             
             if ( type == TL_ITEM_TWEEN ) {
-                // remove tween object from main renderer
-                obj.stop();
+                // reset to original state and
+                // remove object from main renderer
+                obj.restart( true ).pause();
             }
 
             this._definitions[ label ] = obj;
@@ -56,11 +61,11 @@ Timeline.prototype = {
         }
         return this;
     },
-    tick: function( dt ) {
+    tick: function( delta ) {
         this._precompute();
-        timelineTick( this, dt );
+        timelineTick( this, delta );
         if ( ! this._running ) {
-            this._ticker.clear();
+            this._ticker.pause();
         }
         return this;
     },
@@ -88,15 +93,15 @@ Timeline.prototype = {
     timeScale: function( value ) {
         this._timeScale = utils.isNumber( value ) ? Math.max( 0, value ) : 1;
     },
-    seek: function( seconds, accountForDelay ) {
+    time: function( seconds, accountForDelay ) {
         this._precompute();
-        seek( this, seconds, accountForDelay, true );
+        common.seek( this, seconds, accountForDelay, true );
         this.tick( 0 );
         return this;
     },
     progress: function( value, accountForDelay ) {
         this._precompute();
-        seek( this, value, accountForDelay, false );
+        common.seekProgress( this, value, true, accountForDelay );
         this.tick( 0 );
         return this;
     },
@@ -105,22 +110,28 @@ Timeline.prototype = {
         return this;
     },
     resume: function() {
+        this._running = true;
         this._ticker.resume();
         return this;
     },
     restart: function( accountForDelay ) {
-        this._delayLeft = accountForDelay ? this._delay : 0;
+        common.initObjectRunnable( this );
+        this.resume();
         return this;
     },
     play: function( label ) {
         // TODO: validate label?
-        this._startLabel = label;
-        this._ticker.resume();
+        if ( this._definitions[ label ] ) {
+            this._startLabel = label;
+            this._ticker.resume();
+            this._running = true;
+        } else {
+            throw 'Invalid label';
+        }
         return this;
     },
     clear: function() {
-        this._ticker.clear();
-        return this;
+        this.pause();
     }
 }
 
@@ -130,67 +141,93 @@ function initTimeline( tl, params ) {
     common.initObjectRunnable( tl, params );
 }
 
-function timelineTick( tl, dt ) {
-    if ( tl._delayLeft === 0 ) {
+function setTimelineTotalDuration( tl ) {
+    tl._duration = getItemsDuration( tl._computedItems );
+    common.setRunnableTotalDuration( tl );
+}
 
-        common.notifyStart( tl );
+function timelineTick( tl, delta ) {
+    common.notifyStart( tl );
 
-        for( var i = 0; i < tl._computedItems.length; i++ ) {
-            var item = tl._computedItems[ i ];
-            if ( tl._direction == 1 && tl._elapsedTime >= item._start ||
-                 tl._direction == -1 && tl._elapsedTime <= item._end ) {
-                if ( item._type == TL_ITEM_TWEEN ) {
-                    common.seek( item._obj, tl._elapsedTime - item._start );
-                    tween.tweenTick( item._obj, 0 );
-                } else if ( item._type == TL_ITEM_CALLBACK && item._eventsEnabled ) {
-                    item._obj.apply( tl )
+    if ( tl._elapsedTime >= tl._delay ) {
+        updateTimelineItems( tl );
+        for( let i = 0; i < tl._computedItems.length; i++ ) {
+            let item = tl._computedItems[ i ];
+            if ( item._type === TL_ITEM_TWEEN ) {
+                tween.tweenTick( item._obj, 0 );
+            }
+        }
+        common.notifyOnUpdate( tl );
+    }
+
+    if ( common.notifyOnRepeat( tl ) ) {
+    /*    for( let i = 0; i < tl._computedItems.length; i++ ) {
+            let item = tl._computedItems[ i ];
+            if ( item._type === TL_ITEM_TWEEN ) {
+                //common.seek( item._obj, 0 );
+            }
+        }*/
+    }
+
+    common.notifyOnComplete( tl );
+    common.updateState( tl );
+    common.applyStep( tl, delta );
+}
+
+function updateTimelineItems( tl ) {
+    if ( tl._elapsedTime >= tl._delay ) {
+        let time = tl._duration * common.getProgress( tl );
+        for( let i = 0; i < tl._computedItems.length; i++ ) {
+            let item = tl._computedItems[ i ];
+            if ( tl._direction === 1 && tl._elapsedTime >= item._start ||
+                    tl._direction === -1 && tl._elapsedTime <= item._end ) {
+                if ( item._type === TL_ITEM_TWEEN ) {
+                    common.seek( item._obj, time - item._start );
+                } else if ( item._type === TL_ITEM_CALLBACK && item._eventsEnabled ) {
+                    item._obj.apply( tl );
                     item._eventsEnabled = false;
                 }
             }
         }
     }
-    
-    common.notifyOnComplete( tl );
-    common.updateState( tl );
-    common.applyStep( tl, dt );
 }
 
 function getItemsDuration( items ) {
-    return _max( items, '_end' ) - utils.min( items, '_start' );
+    return utils.max( items, '_end' ) - utils.min( items, '_start' );
 }
 
 function computeTimeLineItems( items, startLabel, offset ) {
     offset = offset || 0 ;
-    var result = [];
-    var line = resolveLabel( items, startLabel );
+    let result = [];
+    let line = resolveLabel( items, startLabel );
     line = utils.isArray( line ) ? line : [ line ];
 
     // resolve all labels to objects and flatten all
     // excluding async blocks
-    var rLine = resolveItemLabels( items, line );
-    for ( var i = 0; i < rLine.length; i++ ) {
-        var obj = rLine[ i ];
-        var type = getDefinitionType( obj );
+    let rLine = resolveItemLabels( items, line );
+    for ( let i = 0; i < rLine.length; i++ ) {
+        let obj = rLine[ i ];
+        let type = getDefinitionType( obj );
         if ( type == TL_ITEM_DELAY ) {
             offset += obj;
         } else {
-            var start = offset; 
-            var end = offset;
+            let start = offset; 
+            let end = offset;
             
             if ( type == TL_ITEM_TWEEN ) {
                 end = start + obj._totalDuration;
             }
 
             if ( type == TL_ITEM_LINE_ASYNC ) {
-                var keys = Object.keys( obj );
-                var subItems = [];
-                var min = 0;
-                for( var j = 0; j < keys.length; j++ ) {
-                    var key = keys[ j ];
+                let keys = Object.keys( obj );
+                let subItems = [];
+                let min = 0;
+                for( let j = 0; j < keys.length; j++ ) {
+                    let key = keys[ j ];
                     min = Math.min( min, obj[ key ] );
 
                     // apply global offset
-                    var aOffset = obj[ key ] + offset;
+                    let aOffset = obj[ key ] + offset;
 
                     // compute label recursively
                     subItems = subItems.concat(
@@ -221,9 +258,9 @@ function resolveLabel( items, val ) {
 // Resolves all labels in items to their final objects
 // returns a flatten array with all the items
 function resolveItemLabels( items, arr ) {
-    var done = true;
-    for( var i = 0; i < arr.length; i++ ) {
-        var val = resolveLabel( items, arr[ i ] );
+    let done = true;
+    for( let i = 0; i < arr.length; i++ ) {
+        let val = resolveLabel( items, arr[ i ] );
 
         if ( utils.isString( val ) ) {
             done = false;
@@ -247,10 +284,10 @@ function resolveItemLabels( items, arr ) {
 // adjust current items to start from 0
 // shifting negative offsets over all items
 function absShiftTimeLineItems( items ) {
-    var minOffset = utils.min( items, '_start' );
+    let minOffset = utils.min( items, '_start' );
     if ( minOffset < 0 ) {
-        var shift = Math.abs( minOffset );
-        for ( var i = 0; i < items.length; i++ ) {
+        let shift = Math.abs( minOffset );
+        for ( let i = 0; i < items.length; i++ ) {
             items[ i ]._start += shift;
             items[ i ]._end += shift;
         }
@@ -259,7 +296,7 @@ function absShiftTimeLineItems( items ) {
 }
 
 function getDefinitionType( obj ) {
-    if ( obj instanceof Tween ) {
+    if ( obj instanceof tween.Tween ) {
         return TL_ITEM_TWEEN;
     } else if ( utils.isNumber( obj ) ){
         return TL_ITEM_DELAY;
@@ -277,10 +314,10 @@ function getDefinitionType( obj ) {
 }
 
 function isValidLine( labels, lineArray ) {
-    var valid = true;
-    for( var i = 0; i < lineArray.length; i++ ) {
-        var item = lineArray[ i ];
-        var type = getDefinitionType( item );
+    let valid = true;
+    for( let i = 0; i < lineArray.length; i++ ) {
+        let item = lineArray[ i ];
+        let type = getDefinitionType( item );
         if ( type == TL_ITEM_INVALID ) {
             valid = false;
         } else if ( type == TL_ITEM_LABEL ) {
@@ -293,9 +330,9 @@ function isValidLine( labels, lineArray ) {
         // validate that objects have only numbers assigned
         // only numbers are valid
         } else if ( type == TL_ITEM_LINE_ASYNC ) {
-            var keys = Object.keys( item );
-            for( var j = 0; j < keys.length; j++ ) {
-                var key = keys[ j ];
+            let keys = Object.keys( item );
+            for( let j = 0; j < keys.length; j++ ) {
+                let key = keys[ j ];
                 if ( !utils.isNumber( item[ key ] ) ) {
                     valid = false;
                     break;
@@ -313,6 +350,8 @@ function isValidLine( labels, lineArray ) {
 
 export function timelineFactory() {
     return ( params ) => {
-        return new Timeline();
+        let instance = new Timeline();
+        initTimeline( instance, params );
+        return instance;
     }
 }
