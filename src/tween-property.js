@@ -22,44 +22,52 @@ export class TweenProperty {
 
 TweenProperty.prototype = {
     _expandArrayProperties: function( o, t ) {
+        /*
+        Normalize <origin> and <target> arrays so they have the same
+        size. We expand the smallest array ( or unexistent ) to match
+        the number of elements in the the biggest array.
+        */
         let tp = this.target[ this.name ];
         let len = Math.max( o.length, t.length );
         for ( let i = 0; i < len; i++ ) {
-            o[ i ] = o[ i ] != undefined ? o[ i ] : tp[ i ];
-            t[ i ] = t[ i ] != undefined ? t[ i ] : tp[ i ];
+            o[ i ] = utils.isUndefined( o[ i ] ) ? tp[ i ] : o[ i ];
+            t[ i ] = utils.isUndefined( t[ i ] ) ? tp[ i ] : t[ i ];
         }
         this.length = len;
     },
     sync: function() {
-        
-        if ( this.synced ) {
-            return;
-        }
-        
-        this.synced = true;
-        this.start = this.origProps[ this.name ];
-        if ( this.start === undefined ) {
-            this.start = this.target[ this.name ];
-        }
-        
-        this.end = this.targetProps[ this.name ];
-        if ( this.end === undefined ) {
-            this.end = this.target[ this.name ];
-        }
-
-        this.type = getPropertyType(
-            this.start, this.end, this.target[ this.name ] );
-        
-        if ( this.type == PROP_ARRAY ) {
-            this._expandArrayProperties( this.start, this.end );
-        } else if ( this.type == PROP_WAYPOINTS ) {
-            this.waypoints = [ this.start ].concat( this.end );
-        } else if ( this.type == PROP_COLOR ) {
-            this.colorStart = utils.hexStrToRGB( this.start );
-            this.colorEnd = utils.hexStrToRGB( this.end );
-        }
+        sync( this );
     }
 };
+
+function sync( prop ) {
+    if ( prop.synced ) {
+        return;
+    }
+    
+    prop.synced = true;
+    prop.start = prop.origProps[ prop.name ];
+    if ( utils.isUndefined( prop.start ) ) {
+        prop.start = prop.target[ prop.name ];
+    }
+    
+    prop.end = prop.targetProps[ prop.name ];
+    if ( utils.isUndefined( prop.end ) ) {
+        prop.end = prop.target[ prop.name ];
+    }
+
+    prop.type = getPropertyType(
+        prop.start, prop.end, prop.target[ prop.name ] );
+    
+    if ( prop.type == PROP_ARRAY ) {
+        prop._expandArrayProperties( prop.start, prop.end );
+    } else if ( prop.type == PROP_WAYPOINTS ) {
+        prop.waypoints = [ prop.start ].concat( prop.end );
+    } else if ( prop.type == PROP_COLOR ) {
+        prop.colorStart = utils.hexStrToRGB( prop.start );
+        prop.colorEnd = utils.hexStrToRGB( prop.end );
+    }
+}
 
 function getPropertyType( s, e, t ) {
     if ( utils.isNumber( s ) &&

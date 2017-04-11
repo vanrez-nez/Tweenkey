@@ -7,6 +7,13 @@
 var DEC_FIX = 0.000001;
 var colorRE = new RegExp(/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i);
 
+var reserved = { 
+    to: 0, from: 1, ease: 2, yoyo: 3, delay: 4, repeat: 5,
+    onStart: 6, inverted: 7, onUpdate: 8, autoStart: 9,
+    onComplete: 10, repeatDelay: 11, onRepeat: 12
+};
+    
+
 var TYPE_FNC = ({}).toString;
 function getTypeCheck( typeStr, fastType ) {
     return function ( obj ) {
@@ -30,6 +37,10 @@ var isArray = Array.isArray || getTypeCheck( '[object Array]', false );
 
 function isObject( obj ) {
     return !!obj && obj.constructor === Object;
+}
+
+function isUndefined( obj ) {
+    return obj === undefined;
 }
 
 function flatten( arr ) { 
@@ -544,7 +555,7 @@ function getEasing( val ) {
     } else if ( isArray( val ) && val.length == 4 ) {
         return wrapEasing( bezierEase.apply( this, val ) );
     } else {
-        if ( val != undefined ) {
+        if ( ! isUndefined( val ) ) {
             var easingNames = Object.keys( Easings ).join(' | ');
             console.warn( 'Invalid easing name: ' + val );
             console.warn( 'Available easings: ' + easingNames );
@@ -573,44 +584,52 @@ var TweenProperty = function TweenProperty( id, name, target, origProps, targetP
 
 TweenProperty.prototype = {
     _expandArrayProperties: function( o, t ) {
+        /*
+        Normalize <origin> and <target> arrays so they have the same
+        size. We expand the smallest array ( or unexistent ) to match
+        the number of elements in the the biggest array.
+        */
         var tp = this.target[ this.name ];
         var len = Math.max( o.length, t.length );
         for ( var i = 0; i < len; i++ ) {
-            o[ i ] = o[ i ] != undefined ? o[ i ] : tp[ i ];
-            t[ i ] = t[ i ] != undefined ? t[ i ] : tp[ i ];
+            o[ i ] = isUndefined( o[ i ] ) ? tp[ i ] : o[ i ];
+            t[ i ] = isUndefined( t[ i ] ) ? tp[ i ] : t[ i ];
         }
         this.length = len;
     },
     sync: function() {
-        
-        if ( this.synced ) {
-            return;
-        }
-        
-        this.synced = true;
-        this.start = this.origProps[ this.name ];
-        if ( this.start === undefined ) {
-            this.start = this.target[ this.name ];
-        }
-        
-        this.end = this.targetProps[ this.name ];
-        if ( this.end === undefined ) {
-            this.end = this.target[ this.name ];
-        }
-
-        this.type = getPropertyType(
-            this.start, this.end, this.target[ this.name ] );
-        
-        if ( this.type == PROP_ARRAY ) {
-            this._expandArrayProperties( this.start, this.end );
-        } else if ( this.type == PROP_WAYPOINTS ) {
-            this.waypoints = [ this.start ].concat( this.end );
-        } else if ( this.type == PROP_COLOR ) {
-            this.colorStart = hexStrToRGB( this.start );
-            this.colorEnd = hexStrToRGB( this.end );
-        }
+        sync( this );
     }
 };
+
+function sync( prop ) {
+    if ( prop.synced ) {
+        return;
+    }
+    
+    prop.synced = true;
+    prop.start = prop.origProps[ prop.name ];
+    if ( isUndefined( prop.start ) ) {
+        prop.start = prop.target[ prop.name ];
+    }
+    
+    prop.end = prop.targetProps[ prop.name ];
+    if ( isUndefined( prop.end ) ) {
+        prop.end = prop.target[ prop.name ];
+    }
+
+    prop.type = getPropertyType(
+        prop.start, prop.end, prop.target[ prop.name ] );
+    
+    if ( prop.type == PROP_ARRAY ) {
+        prop._expandArrayProperties( prop.start, prop.end );
+    } else if ( prop.type == PROP_WAYPOINTS ) {
+        prop.waypoints = [ prop.start ].concat( prop.end );
+    } else if ( prop.type == PROP_COLOR ) {
+        prop.colorStart = hexStrToRGB( prop.start );
+        prop.colorEnd = hexStrToRGB( prop.end );
+    }
+}
 
 function getPropertyType( s, e, t ) {
     if ( isNumber( s ) &&
@@ -638,12 +657,18 @@ function getPropertyType( s, e, t ) {
     }
 }
 
+var TWEEN_SET = 0;
+var TWEEN_ALL = 1;
+var TWEEN_FROM = 2;
+var TWEEN_TO = 3;
+
 // Flat dictionary to track all objects properties.
 // Id's are formed from objectId + propertyName
 var propDict = {};
 var propDictIdx = 1;
 
-var Tween = function Tween( onStateChange ) {
+var Tween = function Tween( type, onStateChange ) {
+    this._type = type;
     this._onStateChange = onStateChange;
 };
 
@@ -730,8 +755,8 @@ Tween.prototype = {
 function syncTargetProperties( tween ) {
     var currentNode = tween._firstNode;
     do {
-        for ( var idx = currentNode.properties.length; idx--; ) {
-            currentNode.properties[ idx ].sync();
+        for ( var i = currentNode.properties.length; i--; ) {
+            currentNode.properties[ i ].sync();
         }
     } while ( currentNode = currentNode.next );
 }
@@ -746,14 +771,14 @@ function disableProperties( tween, keys ) {
     var all = ! isArray( keys );
     var currentNode = tween._firstNode;
 
-    if ( currentNode === undefined ) {
+    if ( isUndefined( currentNode ) ) {
         return;
     }
 
     do {
-        for ( var idx = currentNode.properties.length; idx--; ) {
+        for ( var i = currentNode.properties.length; i--; ) {
 
-            var property = currentNode.properties[ idx ];
+            var property = currentNode.properties[ i ];
 
             if ( property.enabled && ( all || keys.indexOf( property.name ) > -1 ) ) {
                 property.enabled = false;
@@ -773,8 +798,8 @@ function overrideDictionaryProperties( tween ) {
     var currentNode = tween._firstNode;
 
     do {
-        for ( var idx = currentNode.properties.length; idx--; ) {
-            var property = currentNode.properties[ idx ];
+        for ( var i = currentNode.properties.length; i--; ) {
+            var property = currentNode.properties[ i ];
             if ( property.enabled ) {
                 
                 // If there is a running property disable it
@@ -795,15 +820,15 @@ function updateTweenProperties( tween ) {
     var currentNode = tween._firstNode;
     var updatedTargets = 0;
     
-    if ( currentNode === undefined ) {
+    if ( isUndefined( currentNode ) ) {
         return;
     }
 
     do {
         var progress = getProgress( tween );
         var updated = false;
-        for ( var idx = currentNode.properties.length; idx--; ) {
-            var p = currentNode.properties[ idx ];
+        for ( var i = currentNode.properties.length; i--; ) {
+            var p = currentNode.properties[ i ];
             if ( p.enabled && p.type !== PROP_INVALID ) {
                 
                 switch( p.type ) {
@@ -878,15 +903,15 @@ function resetTargetProperties( tween ) {
 		}
 	}
 
-    for ( var idx = targets.length; idx--; ) {
-        var currentTarget = targets[ idx ];
+    for ( var i$1 = targets.length; i$1--; ) {
+        var currentTarget = targets[ i$1 ];
 
         // Tag object id without overwrite
         currentTarget._twkId = currentTarget._twkId || propDictIdx++;
 
         var properties = [];
-        for ( var pIdx = 0; pIdx < allKeys.length; pIdx++ ) {
-            var key = allKeys[ pIdx ];
+        for ( var j = 0; j < allKeys.length; j++ ) {
+            var key = allKeys[ j ];
 
             // Check if key is not a tween property
             // also we check that the property exists on target
@@ -927,6 +952,23 @@ function initTweenProperties( tween, target, duration, params ) {
     tween._from         = isObject( params.from ) ? params.from : {};
     tween._to           = isObject( params.to ) ? params.to: {};
     tween._duration     = isNumber( duration ) ? Math.max( 0, duration ) : 0;
+    tween._params       = params;
+}
+
+// Move declared properties inside root params object
+// into <from> or <to> properties dependig of tween type
+function setTweenDefaultProperties( tween ) {
+    var keys = Object.keys( tween._params );
+    var target = tween._to;
+    if ( tween._type === TWEEN_FROM ) {
+        target = tween._from;
+    }
+    for( var i = 0; i < keys.length; i++ ) {
+        var key = keys[ i ];
+        if ( ! ( key in reserved ) && ! ( key in target ) ) {
+            target[ key ] = tween._params[ key ];
+        }
+    }
 }
 
 function initTween( tween, target, duration, params ) {
@@ -934,6 +976,7 @@ function initTween( tween, target, duration, params ) {
     initObjectRunnable( tween, params );
     initObjectCallbacks( tween, params );
     setRunnableTotalDuration( tween );
+    setTweenDefaultProperties( tween );
     if ( tween._running ) {
         tween.resume();
     }
@@ -943,16 +986,14 @@ function initTween( tween, target, duration, params ) {
 * Updates the properties of a given tween
 */
 function tweenTick( tween, delta ) {
+
+    if ( isUndefined( tween._firstNode ) ) {
+        resetTargetProperties( tween );
+        syncTargetProperties( tween );
+    }
     
     if ( notifyStart( tween ) ) {
-        
-        if ( tween._firstNode === undefined ) {
-            resetTargetProperties( tween );
-            syncTargetProperties( tween );
-        }
-
         overrideDictionaryProperties( tween );
-
     }
 
     if ( tween._elapsedTime >= tween._delay ) {
@@ -981,20 +1022,21 @@ function tweenTick( tween, delta ) {
     }
 }
 
-function tweenFactory( onStateChange ) {  
+function tweenFactory( type, onStateChange ) {  
     return function ( target, duration, params ) {
         
-        if ( isObject( duration ) ) {
+        if ( type === TWEEN_SET ) {
             params = duration;
-            duration = 0;    
+            duration = 0;
         }
         
-        var valid = isObject( target ) &&
+        var valid =
+            isObject( target ) &&
             isObject( params ) &&
             isNumber( duration );
         
         if ( valid ) {
-            var instance = new Tween( onStateChange );
+            var instance = new Tween( type, onStateChange );
             initTween( instance, target, duration, params );
             return instance;
         } else {
@@ -1108,9 +1150,12 @@ function wakeup() {
 
 function updateTweens( delta ) {
     delta = Math.max( 0, delta );
+    
     // update tweens (order matters)
     for ( var idx = 0, length = tweens.length; idx < length; idx++  ) {
-        tweens[ idx ]._running && tweenTick( tweens[ idx ], delta );
+        if ( tweens[ idx ]._running ) {
+            tweenTick( tweens[ idx ], delta );
+        }
     }
 }
 
@@ -1306,7 +1351,7 @@ var TL_ITEM_LINE_SYNC = 2;
 var TL_ITEM_LINE_ASYNC = 3;
 var TL_ITEM_DELAY = 4;
 var TL_ITEM_LABEL = 5;
-var TL_ITEM_INVALID = 6;
+var TL_ITEM_INVALID = 7;
 
 var Timeline = function Timeline() {
     this._definitions = {};
@@ -1366,7 +1411,7 @@ Timeline.prototype = {
         return this;
     },
     plot: function( label ) {
-        if ( typeof plotTimeline !== 'undefined' )
+        if ( ! isUndefined( plotTimeline ) )
             { plotTimeline( this, label ); }
         return this;
     },
@@ -1453,12 +1498,7 @@ function timelineTick( tl, delta ) {
     }
 
     if ( notifyOnRepeat( tl ) ) {
-    /*    for( let i = 0; i < tl._computedItems.length; i++ ) {
-            let item = tl._computedItems[ i ];
-            if ( item._type === TL_ITEM_TWEEN ) {
-                //common.seek( item._obj, 0 );
-            }
-        }*/
+        toggleEvents( tl, true );
     }
 
     notifyOnComplete( tl );
@@ -1481,6 +1521,13 @@ function updateTimelineItems( tl ) {
                 }
             }
         }
+    }
+}
+
+function toggleEvents( tl, enabled ) {
+    for( var i = 0; i < tl._computedItems.length; i++ ) {
+        var item = tl._computedItems[ i ];
+        item._eventsEnabled = enabled;
     }
 }
 
@@ -1613,7 +1660,7 @@ function isValidLine( labels, lineArray ) {
         if ( type == TL_ITEM_INVALID ) {
             valid = false;
         } else if ( type == TL_ITEM_LABEL ) {
-            valid = labels[ item ] !== undefined;
+            valid = ! isUndefined( labels[ item ] );
         
         // validate nested arrays recursively
         } else if ( type == TL_ITEM_LINE_SYNC ) {
@@ -1650,8 +1697,10 @@ function timelineFactory() {
 
 var Tweenkey = function Tweenkey () {};
 Tweenkey.prototype = {
-    set         : tweenFactory( onRunnableStateChange ),
-    tween       : tweenFactory( onRunnableStateChange ),
+    set         : tweenFactory( TWEEN_SET, onRunnableStateChange ),
+    tween       : tweenFactory( TWEEN_ALL, onRunnableStateChange ),
+    from        : tweenFactory( TWEEN_FROM, onRunnableStateChange ),
+    to          : tweenFactory( TWEEN_TO, onRunnableStateChange ),
     ticker      : tickerFactory(  onRunnableStateChange ),
     timeline    : timelineFactory(),
     clearAll    : executeOnAllTweens( 'clear' ),

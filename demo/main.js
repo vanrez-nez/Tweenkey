@@ -54,15 +54,15 @@ function getInputRange( params, onChange ) {
 		circle.applyStyle();
 
 		return Tweenkey.tween( circle, 1, {
-			to: { x: xTarget },
+			x: xTarget,
 			ease: 'BackInOut',
 			//repeat: 2,
 			onUpdate: function() {
 				circle.applyStyle();
 			},
-			onStart: function() { console.log( caption + ': onStart' ) },
-			onComplete: function() { console.log( caption + ': onComplete' ) },
-			onRepeat: function() { console.log( caption + ': onRepeat' ) }
+			//onStart: function() { console.log( caption + ': onStart' ) },
+			//onComplete: function() { console.log( caption + ': onComplete' ) },
+			//onRepeat: function() { console.log( caption + ': onRepeat' ) }
 		} );
 	}
 
@@ -94,8 +94,8 @@ function getInputRange( params, onChange ) {
 		var tl = Tweenkey.timeline( {
 			timeScale: 1,
 			//inverted: true,
-			yoyo: true,
-			repeat: 1,
+			//yoyo: true,
+			//repeat: 1,
 			repeatDelay: 0.5,
 			onComplete: function() { console.log( 'TL Complete!' ) },
 			onStart: function() { console.log( 'TL Start!' ) },
@@ -109,11 +109,11 @@ function getInputRange( params, onChange ) {
 		tl.define( 't5', getTweenCircle( 'circle c4', 'T5', 500, 240 ) );
 		tl.define( 't6', getTweenCircle( 'circle c5', 'T6', 500, 300 ) );
 
-		//tl.define( 'cb', function() { console.log('cb!') } );
+		tl.define( 'cb', function() { console.log('cb!') } );
 		tl.define( 's1', [ { 't1': 0, 't2': 0.1, 't3': 0.2 } ] );
 		tl.define( 's2', [ { 't4': 0.3, 't5': 0.4, 't6': 0.5 } ] );
-		tl.define( 'main', [ { 's1': 0, 's2': 0 } ] );
-		tl.play( 'main' );
+		tl.define( 'main', [ { 's1': 0, 's2': 0 }, 'cb' ] );
+		//tl.play( 'main' );
 		//tl.timeScale(1);
 		//tl.resume();
 		//console.log('======');
@@ -127,14 +127,15 @@ function getInputRange( params, onChange ) {
 
 })();
 
+// SINGLE TWEEN
 (function() {
 
 	var circle = getCircleElement( 'c1' );
 	circle.applyStyle();
 
-	if ( true ) {
+	if ( false ) {
 		
-		let t = TweenMax.to( circle, 1, {
+		let t = TweenMax.from( circle, 1, {
 			x: 500,
 			delay: 1,
 			repeat: 10,
@@ -155,13 +156,14 @@ function getInputRange( params, onChange ) {
 			t.restart();
 		}, 500 );
 	} else {
-		var t = Tweenkey.tween( circle, 1, { 
-			to: { x: 500 },
-			delay: 0.5,
-			repeat: 10,
+		var t = Tweenkey.set( circle, {
+			x: 500,
+			//to: { x: 100 },
+			//delay: 0.5,
+			//repeat: 10,
 			//inverted: true,
-			yoyo: true,
-			repeatDelay: 0.5,
+			//yoyo: true,
+			//repeatDelay: 0.5,
 			//autoStart: false,
 			onUpdate: function() {
 				//console.log( 'update:', circle.x );
@@ -179,15 +181,6 @@ function getInputRange( params, onChange ) {
 			}
 		} );
 		
-		circle.x = 400;
-		t.restart();
-		circle.applyStyle();
-
-		setTimeout( ()=> {
-			circle.x = 0;
-			t.restart();
-		}, 500 );
-
 		var input = getInputRange( { y: 100, width: 1400, max: 100000 }, function() {
 			//t.totalProgress( this.value / 100000, false ).pause();
 			t.progress( this.value / 100000, true ).pause();

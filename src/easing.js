@@ -1,4 +1,4 @@
-import * as Utils from './utils';
+import * as utils from './utils';
 import { bezierEase } from './bezier';
 
 function easeIn( power ) { 
@@ -169,10 +169,10 @@ export const Easings = {
 export function getEasing( val ) {
     if ( Easings[ val ] ) {
         return Easings[ val ];
-    } else if ( Utils.isArray( val ) && val.length == 4 ) {
+    } else if ( utils.isArray( val ) && val.length == 4 ) {
         return wrapEasing( bezierEase.apply( this, val ) );
     } else {
-        if ( val != undefined ) {
+        if ( ! utils.isUndefined( val ) ) {
             let easingNames = Object.keys( Easings ).join(' | ');
             console.warn( 'Invalid easing name: ' + val );
             console.warn( 'Available easings: ' + easingNames );

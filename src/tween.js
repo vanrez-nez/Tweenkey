@@ -11,13 +11,19 @@ import {
     PROP_INVALID
 } from './tween-property';
 
+export const TWEEN_SET = 0;
+export const TWEEN_ALL = 1;
+export const TWEEN_FROM = 2;
+export const TWEEN_TO = 3;
+
 // Flat dictionary to track all objects properties.
 // Id's are formed from objectId + propertyName
 let propDict = {};
 let propDictIdx = 1;
 
 export class Tween {
-    constructor( onStateChange ) {
+    constructor( type, onStateChange ) {
+        this._type = type;
         this._onStateChange = onStateChange;
     }
 };
@@ -103,8 +109,8 @@ Tween.prototype = {
 function syncTargetProperties( tween ) {
     let currentNode = tween._firstNode;
     do {
-        for ( let idx = currentNode.properties.length; idx--; ) {
-            currentNode.properties[ idx ].sync();
+        for ( let i = currentNode.properties.length; i--; ) {
+            currentNode.properties[ i ].sync();
         }
     } while ( currentNode = currentNode.next );
 }
@@ -119,14 +125,14 @@ function disableProperties( tween, keys ) {
     let all = ! utils.isArray( keys );
     let currentNode = tween._firstNode;
 
-    if ( currentNode === undefined ) {
+    if ( utils.isUndefined( currentNode ) ) {
         return;
     }
 
     do {
-        for ( let idx = currentNode.properties.length; idx--; ) {
+        for ( let i = currentNode.properties.length; i--; ) {
 
-            let property = currentNode.properties[ idx ];
+            let property = currentNode.properties[ i ];
 
             if ( property.enabled && ( all || keys.indexOf( property.name ) > -1 ) ) {
                 property.enabled = false;
@@ -146,8 +152,8 @@ function overrideDictionaryProperties( tween ) {
     let currentNode = tween._firstNode;
 
     do {
-        for ( let idx = currentNode.properties.length; idx--; ) {
-            let property = currentNode.properties[ idx ];
+        for ( let i = currentNode.properties.length; i--; ) {
+            let property = currentNode.properties[ i ];
             if ( property.enabled ) {
                 
                 // If there is a running property disable it
@@ -168,15 +174,15 @@ function updateTweenProperties( tween ) {
     let currentNode = tween._firstNode;
     let updatedTargets = 0;
     
-    if ( currentNode === undefined ) {
+    if ( utils.isUndefined( currentNode ) ) {
         return;
     }
 
     do {
         let progress = common.getProgress( tween );
         let updated = false;
-        for ( let idx = currentNode.properties.length; idx--; ) {
-            let p = currentNode.properties[ idx ];
+        for ( let i = currentNode.properties.length; i--; ) {
+            let p = currentNode.properties[ i ];
             if ( p.enabled && p.type !== PROP_INVALID ) {
                 
                 switch( p.type ) {
@@ -251,15 +257,15 @@ export function resetTargetProperties( tween ) {
 		}
 	}
 
-    for ( let idx = targets.length; idx--; ) {
-        let currentTarget = targets[ idx ];
+    for ( let i = targets.length; i--; ) {
+        let currentTarget = targets[ i ];
 
         // Tag object id without overwrite
         currentTarget._twkId = currentTarget._twkId || propDictIdx++;
 
         let properties = [];
-        for ( let pIdx = 0; pIdx < allKeys.length; pIdx++ ) {
-            let key = allKeys[ pIdx ];
+        for ( let j = 0; j < allKeys.length; j++ ) {
+            let key = allKeys[ j ];
 
             // Check if key is not a tween property
             // also we check that the property exists on target
@@ -300,6 +306,23 @@ function initTweenProperties( tween, target, duration, params ) {
     tween._from         = utils.isObject( params.from ) ? params.from : {};
     tween._to           = utils.isObject( params.to ) ? params.to: {};
     tween._duration     = utils.isNumber( duration ) ? Math.max( 0, duration ) : 0;
+    tween._params       = params;
+}
+
+// Move declared properties inside root params object
+// into <from> or <to> properties dependig of tween type
+function setTweenDefaultProperties( tween ) {
+    let keys = Object.keys( tween._params );
+    let target = tween._to;
+    if ( tween._type === TWEEN_FROM ) {
+        target = tween._from;
+    }
+    for( let i = 0; i < keys.length; i++ ) {
+        let key = keys[ i ];
+        if ( ! ( key in utils.reserved ) && ! ( key in target ) ) {
+            target[ key ] = tween._params[ key ];
+        }
+    }
 }
 
 function initTween( tween, target, duration, params ) {
@@ -307,6 +330,7 @@ function initTween( tween, target, duration, params ) {
     common.initObjectRunnable( tween, params );
     common.initObjectCallbacks( tween, params );
     common.setRunnableTotalDuration( tween );
+    setTweenDefaultProperties( tween );
     if ( tween._running ) {
         tween.resume();
     }
@@ -316,16 +340,14 @@ function initTween( tween, target, duration, params ) {
 * Updates the properties of a given tween
 */
 export function tweenTick( tween, delta ) {
+
+    if ( utils.isUndefined( tween._firstNode ) ) {
+        resetTargetProperties( tween );
+        syncTargetProperties( tween );
+    }
     
     if ( common.notifyStart( tween ) ) {
-        
-        if ( tween._firstNode === undefined ) {
-            resetTargetProperties( tween );
-            syncTargetProperties( tween );
-        }
-
         overrideDictionaryProperties( tween );
-
     }
 
     if ( tween._elapsedTime >= tween._delay ) {
@@ -354,20 +376,21 @@ export function tweenTick( tween, delta ) {
     }
 }
 
-export function tweenFactory( onStateChange ) {  
+export function tweenFactory( type, onStateChange ) {  
     return ( target, duration, params ) => {
         
-        if ( utils.isObject( duration ) ) {
+        if ( type === TWEEN_SET ) {
             params = duration;
-            duration = 0;    
+            duration = 0;
         }
         
-        const valid = utils.isObject( target ) &&
+        const valid =
+            utils.isObject( target ) &&
             utils.isObject( params ) &&
             utils.isNumber( duration );
         
         if ( valid ) {
-            let instance = new Tween( onStateChange );
+            let instance = new Tween( type, onStateChange );
             initTween( instance, target, duration, params );
             return instance;
         } else {

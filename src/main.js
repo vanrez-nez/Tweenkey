@@ -5,8 +5,10 @@ import * as engine from './engine';
 
 class Tweenkey {}
 Tweenkey.prototype = {
-    set         : tween.tweenFactory( engine.onRunnableStateChange ),
-    tween       : tween.tweenFactory( engine.onRunnableStateChange ),
+    set         : tween.tweenFactory( tween.TWEEN_SET, engine.onRunnableStateChange ),
+    tween       : tween.tweenFactory( tween.TWEEN_ALL, engine.onRunnableStateChange ),
+    from        : tween.tweenFactory( tween.TWEEN_FROM, engine.onRunnableStateChange ),
+    to          : tween.tweenFactory( tween.TWEEN_TO, engine.onRunnableStateChange ),
     ticker      : ticker.tickerFactory(  engine.onRunnableStateChange ),
     timeline    : timeline.timelineFactory(),
     clearAll    : engine.executeOnAllTweens( 'clear' ),

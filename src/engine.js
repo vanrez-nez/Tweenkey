@@ -23,9 +23,12 @@ function wakeup() {
 
 function updateTweens( delta ) {
     delta = Math.max( 0, delta );
+    
     // update tweens (order matters)
     for ( let idx = 0, length = tweens.length; idx < length; idx++  ) {
-        tweens[ idx ]._running && tween.tweenTick( tweens[ idx ], delta );
+        if ( tweens[ idx ]._running ) {
+            tween.tweenTick( tweens[ idx ], delta );
+        }
     }
 }
 

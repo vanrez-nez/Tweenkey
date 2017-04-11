@@ -1,6 +1,13 @@
 export const DEC_FIX = 0.000001;
 export const colorRE = new RegExp(/(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i);
 
+export const reserved = { 
+    to: 0, from: 1, ease: 2, yoyo: 3, delay: 4, repeat: 5,
+    onStart: 6, inverted: 7, onUpdate: 8, autoStart: 9,
+    onComplete: 10, repeatDelay: 11, onRepeat: 12
+};
+    
+
 const TYPE_FNC = ({}).toString;
 function getTypeCheck( typeStr, fastType ) {
     return ( obj ) => {
@@ -27,6 +34,10 @@ export const isColor = ( str ) => {
 export function isObject( obj ) {
     return !!obj && obj.constructor === Object;
 };
+
+export function isUndefined( obj ) {
+    return obj === undefined;
+}
 
 export function flatten( arr ) { 
     return [].concat.apply( [], arr );

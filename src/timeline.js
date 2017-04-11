@@ -9,10 +9,11 @@ import { plotTimeline } from './dev-tools';
 const TL_ITEM_TWEEN = 0;
 const TL_ITEM_CALLBACK = 1;
 const TL_ITEM_LINE_SYNC = 2;
-const TL_ITEM_LINE_ASYNC = 3
+const TL_ITEM_LINE_ASYNC = 3;
 const TL_ITEM_DELAY = 4;
 const TL_ITEM_LABEL = 5;
-const TL_ITEM_INVALID = 6;
+const TL_ITEM_BOOKMARK = 6;
+const TL_ITEM_INVALID = 7;
 
 class Timeline {
     constructor() {
@@ -74,7 +75,7 @@ Timeline.prototype = {
         return this;
     },
     plot: function( label ) {
-        if ( typeof plotTimeline !== 'undefined' )
+        if ( ! utils.isUndefined( plotTimeline ) )
             plotTimeline( this, label );
         return this;
     },
@@ -161,12 +162,7 @@ function timelineTick( tl, delta ) {
     }
 
     if ( common.notifyOnRepeat( tl ) ) {
-    /*    for( let i = 0; i < tl._computedItems.length; i++ ) {
-            let item = tl._computedItems[ i ];
-            if ( item._type === TL_ITEM_TWEEN ) {
-                //common.seek( item._obj, 0 );
-            }
-        }*/
+        toggleEvents( tl, true );
     }
 
     common.notifyOnComplete( tl );
@@ -189,6 +185,13 @@ function updateTimelineItems( tl ) {
                 }
             }
         }
+    }
+}
+
+function toggleEvents( tl, enabled ) {
+    for( let i = 0; i < tl._computedItems.length; i++ ) {
+        let item = tl._computedItems[ i ];
+        item._eventsEnabled = enabled;
     }
 }
 
@@ -321,7 +324,7 @@ function isValidLine( labels, lineArray ) {
         if ( type == TL_ITEM_INVALID ) {
             valid = false;
         } else if ( type == TL_ITEM_LABEL ) {
-            valid = labels[ item ] !== undefined;
+            valid = ! utils.isUndefined( labels[ item ] );
         
         // validate nested arrays recursively
         } else if ( type == TL_ITEM_LINE_SYNC ) {
