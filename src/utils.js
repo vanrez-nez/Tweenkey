@@ -7,6 +7,12 @@ export const reserved = {
     onComplete: 10, repeatDelay: 11, onRepeat: 12
 };
     
+window.performance = (window.performance || {
+    offset: Date.now(),
+    now: function now(){
+        return Date.now() - this.offset;
+    }
+});
 
 const TYPE_FNC = ({}).toString;
 function getTypeCheck( typeStr, fastType ) {

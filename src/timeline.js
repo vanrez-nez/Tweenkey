@@ -131,7 +131,7 @@ Timeline.prototype = {
         }
         return this;
     },
-    clear: function() {
+    kill: function() {
         this.pause();
     }
 }

@@ -23,26 +23,34 @@ function wakeup() {
 
 function updateTweens( delta ) {
     delta = Math.max( 0, delta );
-    
+
     // update tweens (order matters)
     for ( let idx = 0, length = tweens.length; idx < length; idx++  ) {
-        if ( tweens[ idx ]._running ) {
-            tween.tweenTick( tweens[ idx ], delta );
+        let tw = tweens[ idx ];
+        if ( tw._running ) {
+            tween.tweenTick( tw, delta );
         }
     }
 }
 
-function onFrame() {
+function updateTickers( delta ) {
+    for ( let idx = 0; idx < tickers.length; idx++ ) {
+        let tk = tickers[ idx ];
+        if ( tk._running ) {
+            tk.tick( delta );
+        }
+    }
+}
+
+function onFrame( delta = utils.now() ) {
+
     if ( cleanupDirty ) {
-        cleanupRunnable( tickers );
         cleanupRunnable( tweens );
+        cleanupRunnable( tickers );
         cleanupDirty = false;
     }
 
-    // Update tickers
-    for ( let idx = 0; idx < tickers.length; idx++ ) {
-        tickers[ idx ].tick( utils.now() );
-    }
+    updateTickers( delta );
     
     if ( tickers.length === 1 && tweens.length === 0 ) {
         isSleeping = true;
@@ -55,7 +63,8 @@ function onFrame() {
 function cleanupRunnable( arr ) {
     for ( let idx = arr.length; idx--; ) {
         let obj = arr[ idx ];
-        if ( ! obj._running ) {
+        if ( obj._alive === false ) {
+            obj._running = false;
             obj._queued = false;
             arr.splice( idx, 1 );
         }
@@ -64,14 +73,14 @@ function cleanupRunnable( arr ) {
 
 function queueTween( tw ) {
     if ( ! tw._queued ) {
-        tweens.push( tw );
+        tweens.unshift( tw );
         tw._queued = true;
     }
 }
 
 function queueTicker( tk ) {
     if ( ! tk._queued ) {
-        tickers.push( tk );
+        tickers.unshift( tk );
         tk._queued = true;
     }
 }
@@ -87,12 +96,21 @@ export function onRunnableStateChange( obj ) {
 }
 
 export function executeOnAllTweens ( funcName ) {
-    return () => {
+    return function() {
         for ( let idx = tweens.length; idx--; ) {
             let tween = tweens[ idx ];
             tween[ funcName ].apply( tween, arguments );
         }
     };
+}
+
+export function killTweensOf() {
+    return function( obj ) {
+        if ( utils.isObject( obj ) && obj._twkId !== undefined ) {
+            let id = obj._twkId;
+            tween.disableObjectIdProperties( id );
+        }
+    }
 }
 
 export function setAutoUpdate( enabled ) {
@@ -106,6 +124,7 @@ export function setAutoUpdate( enabled ) {
 export function manualStep( step ) {
     step = typeof step == 'number' ? step : mainTicker._fpsStep;
     updateTweens( step );
+    updateTickers( step );
 }
 
 export function setFPS( val ) {

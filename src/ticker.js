@@ -28,7 +28,7 @@ Ticker.prototype = {
         if ( delta > this._fpsStep ) {
             let drop = delta % this._fpsStep;
             this._then = time - drop;
-            this._onTick( Math.min( delta - drop, this._fpsStep * 4 ) / 1000 );
+            this._onTick( Math.max( 0,  delta - drop ) / 1000 );
         }
 
         return this;

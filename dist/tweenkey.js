@@ -13,6 +13,12 @@ var reserved = {
     onComplete: 10, repeatDelay: 11, onRepeat: 12
 };
     
+window.performance = (window.performance || {
+    offset: Date.now(),
+    now: function now(){
+        return Date.now() - this.offset;
+    }
+});
 
 var TYPE_FNC = ({}).toString;
 function getTypeCheck( typeStr, fastType ) {
@@ -117,6 +123,7 @@ function initObjectRunnable( obj, params ) {
     obj._repeatDelay    = isNumber( p.repeatDelay ) ? Math.max( 0, p.repeatDelay ) : 0;
     obj._timeScale      = isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
     obj._running        = isBoolean( p.autoStart ) ? p.autoStart : true;
+    obj._alive          = true;
     obj._params         = p;
 }
 
@@ -148,8 +155,9 @@ function notifyStart( obj ) {
 }
 
 function notifyOnComplete( obj ) {
+    
     if ( obj._elapsedTime >= obj._delay &&
-        roundDecimals( obj._elapsedTime ) === obj._totalDuration &&
+        roundDecimals( obj._elapsedTime ) === roundDecimals( obj._totalDuration ) &&
         ! obj._infinite && obj._lastElapsedTime < obj._elapsedTime ) {
             obj._onComplete.call( obj, obj._target );
             return true;
@@ -170,15 +178,6 @@ function notifyOnRepeat( obj ) {
             obj._onRepeat.call( obj, obj._target );
             return true;
         }
-    }
-}
-
-/*
- * Updates a tween or timeline state.
- */
-function updateState( obj ) {
-    if ( ! obj._infinite && obj._totalProgress === 1 ) {
-        obj._running = false;
     }
 }
 
@@ -570,8 +569,7 @@ var PROP_COLOR = 2;
 var PROP_WAYPOINTS = 3;
 var PROP_INVALID = 4;
 
-var TweenProperty = function TweenProperty( id, name, target, origProps, targetProps ) {
-    this.id = id;
+var TweenProperty = function TweenProperty( name, target, origProps, targetProps ) {
     this.name = name;
     this.target = target;
     this.origProps = origProps;
@@ -662,8 +660,7 @@ var TWEEN_ALL = 1;
 var TWEEN_FROM = 2;
 var TWEEN_TO = 3;
 
-// Flat dictionary to track all objects properties.
-// Id's are formed from objectId + propertyName
+// Dictionary to track all objects properties.
 var propDict = {};
 var propDictIdx = 1;
 
@@ -718,7 +715,7 @@ Tween.prototype = {
         }
         return this;
     },
-    clear: function() {
+    kill: function() {
         var arguments$1 = arguments;
 
         if ( arguments.length > 0 ) {
@@ -734,12 +731,12 @@ Tween.prototype = {
             this._running = false;
             disableProperties( this );
         }
+        this._alive = false;
         this._onStateChange( this );
         return this;
     },
     pause: function() {
         this._running = false;
-        this._onStateChange( this );
         return this;
     },
     resume: function() {
@@ -761,6 +758,23 @@ function syncTargetProperties( tween ) {
     } while ( currentNode = currentNode.next );
 }
 
+function clearEmptyObject( objectId ) {
+    var obj = propDict[ objectId ];
+    if ( obj && Object.keys( obj ).length === 0 ) {
+        delete propDict[ objectId ];
+    }
+}
+
+function clearProperty( property ) {
+    if ( property.enabled ) {
+        property.enabled = false;
+        var targetId = property.target._twkId;
+        if ( propDict[ targetId ] ) {
+            delete propDict[ targetId ][ property.name ];
+        }
+    }
+}
+
 /*
 * Disables only <enabled> properties of a tween and removes them from dictionary.
 * Keys param specifies an array containing which properties to disable, by default
@@ -777,14 +791,11 @@ function disableProperties( tween, keys ) {
 
     do {
         for ( var i = currentNode.properties.length; i--; ) {
-
             var property = currentNode.properties[ i ];
-
             if ( property.enabled && ( all || keys.indexOf( property.name ) > -1 ) ) {
-                property.enabled = false;
-                delete propDict[ property.id ];
+                clearProperty( property );
+                clearEmptyObject( property.target._twkId );
             }
-
         }
     } while ( currentNode = currentNode.next );
 }
@@ -804,12 +815,18 @@ function overrideDictionaryProperties( tween ) {
                 
                 // If there is a running property disable it
                 // and remove it from dictionary
-                if ( propDict[ property.id ] && propDict[ property.id ] !== property) {
-                    propDict[ property.id ].enabled = false;
-                    delete propDict[ property.id ];
+                var targetId = property.target._twkId;
+                var existingTarget = propDict[ targetId ] || {};
+                if ( existingTarget[ property.name ] && existingTarget[ property.name ] !== property) {
+                    clearProperty( existingTarget[ property.name ] );
+                    clearEmptyObject( targetId );
                 }
 
-                propDict[ property.id ] = property;
+                // update reverse dictionary
+                propDict[ targetId ] = propDict[ targetId ] || {};
+                propDict[ targetId ][ property.name ] = property;
+
+                
             }
         }
     } while ( currentNode = currentNode.next );
@@ -884,6 +901,17 @@ function updateTweenProperties( tween ) {
 }
 
 
+function disableObjectIdProperties( objectId ) {
+    if ( isObject( propDict[ objectId ] ) ) {
+        var keys = Object.keys( propDict[ objectId ] );
+        for ( var i = 0; i < keys.length; i++ ) {
+            var name = keys[ i ];
+            clearProperty( propDict[ objectId ][ name ] );
+        }
+        clearEmptyObject( objectId );
+    }
+}
+
 /*
 * Builds a linked list of all objects and properties to iterate
 * It stores the first linked object in the current tween
@@ -917,7 +945,6 @@ function resetTargetProperties( tween ) {
             // also we check that the property exists on target
             if ( !tween.hasOwnProperty( key ) && key in currentTarget ) {
                 var property = new TweenProperty(
-                    currentTarget._twkId + key,
                     key,
                     currentTarget,
                     originProperties,
@@ -1005,18 +1032,19 @@ function tweenTick( tween, delta ) {
         if ( updatedTargets > 0 ) {
             notifyOnUpdate( tween );
         } else {
-
             // No updated targets means all properties where overrided
-            // We clear the tween early to avoid further notifications
-            tween.clear();
+            // We kill the tween early to avoid further notifications
+            tween.kill();
         }
     } else {
         updateTweenProperties( tween );
     }
     
     notifyOnRepeat( tween );
-    notifyOnComplete( tween );
-    updateState( tween );
+    if ( notifyOnComplete( tween ) ) {
+        tween.kill();
+    }
+    //common.updateState( tween );
     if ( delta > 0 ) {
         applyStep( tween, delta );
     }
@@ -1071,7 +1099,7 @@ Ticker.prototype = {
         if ( delta > this._fpsStep ) {
             var drop = delta % this._fpsStep;
             this._then = time - drop;
-            this._onTick( Math.min( delta - drop, this._fpsStep * 4 ) / 1000 );
+            this._onTick( Math.max( 0,  delta - drop ) / 1000 );
         }
 
         return this;
@@ -1150,26 +1178,36 @@ function wakeup() {
 
 function updateTweens( delta ) {
     delta = Math.max( 0, delta );
-    
+
     // update tweens (order matters)
     for ( var idx = 0, length = tweens.length; idx < length; idx++  ) {
-        if ( tweens[ idx ]._running ) {
-            tweenTick( tweens[ idx ], delta );
+        var tw = tweens[ idx ];
+        if ( tw._running ) {
+            tweenTick( tw, delta );
         }
     }
 }
 
-function onFrame() {
+function updateTickers( delta ) {
+    for ( var idx = 0; idx < tickers.length; idx++ ) {
+        var tk = tickers[ idx ];
+        if ( tk._running ) {
+            tk.tick( delta );
+        }
+    }
+}
+
+function onFrame( delta ) {
+    if ( delta === void 0 ) delta = now();
+
+
     if ( cleanupDirty ) {
-        cleanupRunnable( tickers );
         cleanupRunnable( tweens );
+        cleanupRunnable( tickers );
         cleanupDirty = false;
     }
 
-    // Update tickers
-    for ( var idx = 0; idx < tickers.length; idx++ ) {
-        tickers[ idx ].tick( now() );
-    }
+    updateTickers( delta );
     
     if ( tickers.length === 1 && tweens.length === 0 ) {
         isSleeping = true;
@@ -1182,7 +1220,8 @@ function onFrame() {
 function cleanupRunnable( arr ) {
     for ( var idx = arr.length; idx--; ) {
         var obj = arr[ idx ];
-        if ( ! obj._running ) {
+        if ( obj._alive === false ) {
+            obj._running = false;
             obj._queued = false;
             arr.splice( idx, 1 );
         }
@@ -1191,14 +1230,14 @@ function cleanupRunnable( arr ) {
 
 function queueTween( tw ) {
     if ( ! tw._queued ) {
-        tweens.push( tw );
+        tweens.unshift( tw );
         tw._queued = true;
     }
 }
 
 function queueTicker( tk ) {
     if ( ! tk._queued ) {
-        tickers.push( tk );
+        tickers.unshift( tk );
         tk._queued = true;
     }
 }
@@ -1214,14 +1253,23 @@ function onRunnableStateChange( obj ) {
 }
 
 function executeOnAllTweens ( funcName ) {
-    var arguments$1 = arguments;
+    return function() {
+        var arguments$1 = arguments;
 
-    return function () {
         for ( var idx = tweens.length; idx--; ) {
             var tween = tweens[ idx ];
             tween[ funcName ].apply( tween, arguments$1 );
         }
     };
+}
+
+function killTweensOf() {
+    return function( obj ) {
+        if ( isObject( obj ) && obj._twkId !== undefined ) {
+            var id = obj._twkId;
+            disableObjectIdProperties( id );
+        }
+    }
 }
 
 function setAutoUpdate( enabled ) {
@@ -1235,6 +1283,7 @@ function setAutoUpdate( enabled ) {
 function manualStep( step ) {
     step = typeof step == 'number' ? step : mainTicker._fpsStep;
     updateTweens( step );
+    updateTickers( step );
 }
 
 function setFPS( val ) {
@@ -1467,7 +1516,7 @@ Timeline.prototype = {
         }
         return this;
     },
-    clear: function() {
+    kill: function() {
         this.pause();
     }
 };
@@ -1502,7 +1551,7 @@ function timelineTick( tl, delta ) {
     }
 
     notifyOnComplete( tl );
-    updateState( tl );
+    undefined( tl );
     applyStep( tl, delta );
 }
 
@@ -1701,10 +1750,10 @@ Tweenkey.prototype = {
     tween       : tweenFactory( TWEEN_ALL, onRunnableStateChange ),
     from        : tweenFactory( TWEEN_FROM, onRunnableStateChange ),
     to          : tweenFactory( TWEEN_TO, onRunnableStateChange ),
-    ticker      : tickerFactory(  onRunnableStateChange ),
+    ticker      : tickerFactory( onRunnableStateChange ),
     timeline    : timelineFactory(),
-    clearAll    : executeOnAllTweens( 'clear' ),
-    clearTweensOf: function () { console.log('todo'); },
+    killAll     : executeOnAllTweens( 'kill' ),
+    killTweensOf: killTweensOf(),
     pauseAll    : executeOnAllTweens( 'pause' ),
     resumeAll   : executeOnAllTweens( 'resume' ),
     update      : manualStep,

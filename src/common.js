@@ -34,6 +34,7 @@ export function initObjectRunnable( obj, params ) {
     obj._repeatDelay    = utils.isNumber( p.repeatDelay ) ? Math.max( 0, p.repeatDelay ) : 0;
     obj._timeScale      = utils.isNumber( p.timeScale ) && p.timeScale > 0 ? p.timeScale: 1;
     obj._running        = utils.isBoolean( p.autoStart ) ? p.autoStart : true;
+    obj._alive          = true;
     obj._params         = p;
 }
 
@@ -65,8 +66,9 @@ export function notifyStart( obj ) {
 }
 
 export function notifyOnComplete( obj ) {
+    
     if ( obj._elapsedTime >= obj._delay &&
-        utils.roundDecimals( obj._elapsedTime ) === obj._totalDuration &&
+        utils.roundDecimals( obj._elapsedTime ) === utils.roundDecimals( obj._totalDuration ) &&
         ! obj._infinite && obj._lastElapsedTime < obj._elapsedTime ) {
             obj._onComplete.call( obj, obj._target );
             return true;
@@ -87,15 +89,6 @@ export function notifyOnRepeat( obj ) {
             obj._onRepeat.call( obj, obj._target );
             return true;
         }
-    }
-}
-
-/*
- * Updates a tween or timeline state.
- */
-export function updateState( obj ) {
-    if ( ! obj._infinite && obj._totalProgress === 1 ) {
-        obj._running = false;
     }
 }
 

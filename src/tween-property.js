@@ -7,8 +7,7 @@ export const PROP_WAYPOINTS = 3;
 export const PROP_INVALID = 4;
 
 export class TweenProperty {
-    constructor( id, name, target, origProps, targetProps ) {
-        this.id = id;
+    constructor( name, target, origProps, targetProps ) {
         this.name = name;
         this.target = target;
         this.origProps = origProps;

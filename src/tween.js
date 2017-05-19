@@ -16,8 +16,7 @@ export const TWEEN_ALL = 1;
 export const TWEEN_FROM = 2;
 export const TWEEN_TO = 3;
 
-// Flat dictionary to track all objects properties.
-// Id's are formed from objectId + propertyName
+// Dictionary to track all objects properties.
 let propDict = {};
 let propDictIdx = 1;
 
@@ -74,7 +73,7 @@ Tween.prototype = {
         }
         return this;
     },
-    clear: function() {
+    kill: function() {
         if ( arguments.length > 0 ) {
 
             // fix: avoid optimization bailout
@@ -88,12 +87,12 @@ Tween.prototype = {
             this._running = false;
             disableProperties( this );
         }
+        this._alive = false;
         this._onStateChange( this );
         return this;
     },
     pause: function() {
         this._running = false;
-        this._onStateChange( this );
         return this;
     },
     resume: function() {
@@ -115,6 +114,23 @@ function syncTargetProperties( tween ) {
     } while ( currentNode = currentNode.next );
 }
 
+function clearEmptyObject( objectId ) {
+    let obj = propDict[ objectId ];
+    if ( obj && Object.keys( obj ).length === 0 ) {
+        delete propDict[ objectId ];
+    }
+}
+
+function clearProperty( property ) {
+    if ( property.enabled ) {
+        property.enabled = false;
+        let targetId = property.target._twkId;
+        if ( propDict[ targetId ] ) {
+            delete propDict[ targetId ][ property.name ];
+        }
+    }
+}
+
 /*
 * Disables only <enabled> properties of a tween and removes them from dictionary.
 * Keys param specifies an array containing which properties to disable, by default
@@ -131,14 +147,11 @@ function disableProperties( tween, keys ) {
 
     do {
         for ( let i = currentNode.properties.length; i--; ) {
-
             let property = currentNode.properties[ i ];
-
             if ( property.enabled && ( all || keys.indexOf( property.name ) > -1 ) ) {
-                property.enabled = false;
-                delete propDict[ property.id ];
+                clearProperty( property );
+                clearEmptyObject( property.target._twkId );
             }
-
         }
     } while ( currentNode = currentNode.next );
 }
@@ -158,12 +171,18 @@ function overrideDictionaryProperties( tween ) {
                 
                 // If there is a running property disable it
                 // and remove it from dictionary
-                if ( propDict[ property.id ] && propDict[ property.id ] !== property) {
-                    propDict[ property.id ].enabled = false;
-                    delete propDict[ property.id ];
+                let targetId = property.target._twkId;
+                let existingTarget = propDict[ targetId ] || {};
+                if ( existingTarget[ property.name ] && existingTarget[ property.name ] !== property) {
+                    clearProperty( existingTarget[ property.name ] );
+                    clearEmptyObject( targetId );
                 }
 
-                propDict[ property.id ] = property;
+                // update reverse dictionary
+                propDict[ targetId ] = propDict[ targetId ] || {};
+                propDict[ targetId ][ property.name ] = property;
+
+                
             }
         }
     } while ( currentNode = currentNode.next );
@@ -238,6 +257,17 @@ function updateTweenProperties( tween ) {
 }
 
 
+export function disableObjectIdProperties( objectId ) {
+    if ( utils.isObject( propDict[ objectId ] ) ) {
+        let keys = Object.keys( propDict[ objectId ] );
+        for ( var i = 0; i < keys.length; i++ ) {
+            let name = keys[ i ];
+            clearProperty( propDict[ objectId ][ name ] );
+        }
+        clearEmptyObject( objectId );
+    }
+}
+
 /*
 * Builds a linked list of all objects and properties to iterate
 * It stores the first linked object in the current tween
@@ -271,7 +301,6 @@ export function resetTargetProperties( tween ) {
             // also we check that the property exists on target
             if ( !tween.hasOwnProperty( key ) && key in currentTarget ) {
                 let property = new TweenProperty(
-                    currentTarget._twkId + key,
                     key,
                     currentTarget,
                     originProperties,
@@ -359,18 +388,19 @@ export function tweenTick( tween, delta ) {
         if ( updatedTargets > 0 ) {
             common.notifyOnUpdate( tween );
         } else {
-
             // No updated targets means all properties where overrided
-            // We clear the tween early to avoid further notifications
-            tween.clear();
+            // We kill the tween early to avoid further notifications
+            tween.kill();
         }
     } else {
         updateTweenProperties( tween );
     }
     
     common.notifyOnRepeat( tween );
-    common.notifyOnComplete( tween );
-    common.updateState( tween );
+    if ( common.notifyOnComplete( tween ) ) {
+        tween.kill();
+    }
+    //common.updateState( tween );
     if ( delta > 0 ) {
         common.applyStep( tween, delta );
     }
